@@ -4,9 +4,11 @@
 
 A quiet task workspace that collects Markdown tasks from across your Obsidian vault.
 
-[![Watch the Calm Tasks overview](docs/assets/video-poster.webp)](docs/assets/calm-tasks-overview.mp4)
+[View the full introduction and feature guide on the Calm Tasks website.](https://sungikim.github.io/Calm-Tasks/)
 
-Click the preview to watch the 73-second overview.
+[![Calm Tasks workspace](docs/assets/all-workspace.png)](https://sungikim.github.io/Calm-Tasks/)
+
+Click the screenshot to open the full introduction and overview video.
 
 Calm Tasks borrows the plain-text spirit of Org mode, with a smaller syntax designed for Obsidian. Your Markdown files remain the source of truth, while the dedicated workspace gives you a clear way to organize and review them.
 
@@ -93,4 +95,4 @@ Calm Tasks is free to use. Modified or derivative versions may be used non-comme
 
 If Calm Tasks helps you stay organized, a small coffee helps keep its development going.
 
-[![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://buymeacoffee.com/sungikimi)
+<a href="https://buymeacoffee.com/sungikimi"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="217"></a>
