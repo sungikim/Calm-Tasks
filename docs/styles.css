@@ -265,12 +265,7 @@ code, pre { font-family: "SFMono-Regular", Consolas, monospace; }
 
 body {
   background-color: var(--bg);
-  background-image:
-    linear-gradient(rgba(185, 160, 232, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(185, 160, 232, 0.025) 1px, transparent 1px),
-    radial-gradient(circle at 78% 3%, rgba(112, 75, 159, 0.17), transparent 34rem),
-    linear-gradient(180deg, #120d1b 0%, var(--bg) 36%, var(--bg-deep) 100%);
-  background-size: 34px 34px, 34px 34px, auto, auto;
+  background-image: linear-gradient(180deg, #120d1b 0%, var(--bg) 46%, var(--bg-deep) 100%);
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
   font-size: 14px;
   line-height: 1.72;
@@ -379,7 +374,7 @@ body {
 }
 
 @media (max-width: 680px) {
-  body { background-size: 26px 26px, 26px 26px, auto, auto; font-size: 13px; }
+  body { font-size: 13px; }
   .hero h1 { font-size: clamp(42px, 13vw, 62px); }
   .hero-lede { font-size: 14px; }
   .section { padding-block: 84px; }
@@ -874,4 +869,160 @@ html[lang="ko"] .final-cta h2 {
   border-radius: 0;
   background: transparent;
   object-fit: contain;
+}
+
+/* Wide-screen cleanup: content first, captures directly underneath. */
+body {
+  background: linear-gradient(180deg, #120d1b 0%, var(--bg) 46%, var(--bg-deep) 100%);
+}
+
+.site-header {
+  background: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+.site-header.is-scrolled {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(12px);
+}
+
+.hero {
+  display: block;
+}
+
+.hero-copy,
+.video-copy,
+.note-copy,
+.section-heading.narrow {
+  width: 100%;
+  max-width: none;
+}
+
+.hero-lede {
+  max-width: 900px;
+}
+
+.hero-visual {
+  width: 100%;
+  max-width: 1000px;
+  margin-top: 38px;
+}
+
+.section-heading.narrow > p:last-child,
+.split-heading > p {
+  max-width: none;
+}
+
+.split-heading {
+  display: block;
+}
+
+.split-heading > p {
+  margin: 14px 0 0;
+}
+
+.video-section {
+  display: block;
+}
+
+.video-shell {
+  width: 100%;
+  max-width: 1000px;
+  margin-top: 28px;
+}
+
+.window-frame,
+.media-frame,
+.video-shell,
+.media-frame img,
+.video-shell video {
+  box-shadow: none !important;
+}
+
+/* The PNG captures contain empty black margins. Crop those margins in-page so
+   the visible Obsidian window shares the same left edge as its heading. */
+.media-frame-hero,
+.media-frame-card,
+.media-frame-detail {
+  overflow: hidden;
+  aspect-ratio: 1.555;
+}
+
+.media-frame-hero img,
+.media-frame-card img,
+.media-frame-detail img {
+  width: 108.4%;
+  max-width: none;
+  height: auto;
+  transform: translate(-3.9%, -3.8%);
+}
+
+.mode-card > .media-frame,
+.detail-card > .media-frame {
+  margin-top: auto;
+}
+
+.final-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 16px;
+  padding: 34px;
+}
+
+.final-cta::before {
+  margin: 0 0 2px;
+}
+
+.final-cta > div {
+  width: 100%;
+}
+
+.final-cta h2,
+html[lang="ko"] .final-cta h2 {
+  max-width: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: clamp(27px, 3.7vw, 48px);
+  line-height: 1.12;
+}
+
+.final-cta p {
+  margin-top: 8px;
+}
+
+.cta-actions {
+  gap: 11px;
+}
+
+.site-footer {
+  padding-bottom: 34px;
+}
+
+@media (max-width: 680px) {
+  .hero h1 {
+    font-size: clamp(36px, 11vw, 52px);
+  }
+
+  .section h2 {
+    font-size: clamp(27px, 8.3vw, 39px);
+    overflow-wrap: anywhere;
+  }
+
+  .hero-visual,
+  .video-shell {
+    margin-top: 24px;
+  }
+
+  .final-cta {
+    gap: 12px;
+    padding: 26px 20px;
+  }
+
+  .final-cta h2,
+  html[lang="ko"] .final-cta h2 {
+    font-size: clamp(22px, 7vw, 30px);
+  }
 }
