@@ -8,8 +8,6 @@ See the [website](https://sungikim.github.io/Calm-Tasks/) for a detailed introdu
 
 [![Calm Tasks workspace](docs/assets/all-workspace.png)](https://sungikim.github.io/Calm-Tasks/)
 
-Click the screenshot to open the full introduction and overview video.
-
 Calm Tasks borrows the plain-text spirit of Org mode, with a smaller syntax designed for Obsidian. Your Markdown files remain the source of truth, while the dedicated workspace gives you a clear way to organize and review them.
 
 ## Features
@@ -95,4 +93,4 @@ Calm Tasks is free to use. Modified or derivative versions may be used non-comme
 
 If Calm Tasks helps you stay organized, a small coffee helps keep its development going.
 
-<a href="https://buymeacoffee.com/sungikimi"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="217"></a>
+<a href="https://buymeacoffee.com/sungikimi" target="_blank" rel="noopener noreferrer"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="217"></a>

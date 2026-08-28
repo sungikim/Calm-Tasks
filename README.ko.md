@@ -8,8 +8,6 @@ Obsidian Vault의 여러 Markdown 파일에 흩어진 할 일을 한곳에 모�
 
 [![Calm Tasks 작업 화면](docs/assets/all-workspace.png)](https://sungikim.github.io/Calm-Tasks/)
 
-스크린샷을 클릭하면 상세 소개와 오버뷰 영상이 있는 웹사이트로 이동합니다.
-
 Calm Tasks는 Org mode의 평문 중심 철학을 Obsidian에 맞게 더 작고 단순한 문법으로 옮겼습니다. 원본은 계속 Markdown 파일에 남고, 전용 작업 화면에서 할 일을 보기 좋게 정리하고 관리할 수 있습니다.
 
 ## 주요 기능
@@ -95,4 +93,4 @@ Calm Tasks는 무료로 사용할 수 있습니다. 수정·파생 버전은 비
 
 Calm Tasks가 할 일을 정리하는 데 도움이 되었다면, 커피 한 잔으로 꾸준한 개발을 응원해 주세요.
 
-<a href="https://buymeacoffee.com/sungikimi"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="217"></a>
+<a href="https://buymeacoffee.com/sungikimi" target="_blank" rel="noopener noreferrer"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="217"></a>
