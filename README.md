@@ -21,7 +21,7 @@ Calm Tasks borrows the plain-text spirit of Org mode, with a smaller syntax desi
 - Edit a selected task in the optional bottom or right-side Details panel.
 - Color dates and priorities automatically in ordinary Markdown notes as well as the workspace.
 - Keep completed tasks visible until the configurable daily archive time.
-- Adjust spacing, line height, colors, and workspace-only Custom CSS.
+- Adjust spacing, line height, and task metadata colors.
 
 Deleting a custom group does not delete its tasks; they return to Inbox.
 
@@ -83,7 +83,7 @@ Reload Obsidian and enable Calm Tasks under **Settings → Community plugins**. 
 
 ## Theme compatibility
 
-Calm Tasks was built and tested primarily with the Minimal theme and a personal CSS setup. Other themes may need small adjustments through the workspace Custom CSS setting.
+Calm Tasks was built and tested primarily with the Minimal theme. For theme-specific adjustments, use Obsidian's standard CSS snippets.
 
 ## License
 

@@ -76,57 +76,8 @@ function preserveTaskComments(previousTitle: string, nextTitle: string): string 
   return `${visible}${visible ? " " : ""}${comments.join(" ")}${inlineSuffix}`.trim();
 }
 
-function splitSelectorList(value: string): string[] {
-  const selectors: string[] = [];
-  let start = 0;
-  let roundDepth = 0;
-  let squareDepth = 0;
-  let quote = "";
-  for (let index = 0; index < value.length; index++) {
-    const character = value[index] ?? "";
-    if (quote) {
-      if (character === quote && value[index - 1] !== "\\") quote = "";
-      continue;
-    }
-    if (character === "\"" || character === "'") { quote = character; continue; }
-    if (character === "(") roundDepth += 1;
-    else if (character === ")") roundDepth = Math.max(0, roundDepth - 1);
-    else if (character === "[") squareDepth += 1;
-    else if (character === "]") squareDepth = Math.max(0, squareDepth - 1);
-    else if (character === "," && roundDepth === 0 && squareDepth === 0) {
-      selectors.push(value.slice(start, index).trim());
-      start = index + 1;
-    }
-  }
-  selectors.push(value.slice(start).trim());
-  return selectors.filter(Boolean);
-}
-
-function scopedWorkspaceCss(value: string): string {
-  if (!value.trim()) return "";
-  try {
-    const sheet = new CSSStyleSheet();
-    sheet.replaceSync(value);
-    const serialize = (rules: CSSRuleList | CSSRule[]): string => Array.from(rules).map(rule => {
-      if (rule instanceof CSSStyleRule) {
-        const selectors = splitSelectorList(rule.selectorText).map(selector => {
-          if (selector.includes(".calm-tasks")) return selector;
-          if (selector === ":root" || selector === "body" || selector === "html") return ".calm-tasks";
-          return `.calm-tasks ${selector}`;
-        });
-        return `${selectors.join(", ")} { ${rule.style.cssText} }`;
-      }
-      const grouping = rule as CSSRule & { cssRules?: CSSRuleList };
-      if (grouping.cssRules && /^@(media|supports|container|layer)\b/u.test(rule.cssText)) {
-        const opening = rule.cssText.indexOf("{");
-        return opening >= 0 ? `${rule.cssText.slice(0, opening)}{${serialize(grouping.cssRules)}}` : rule.cssText;
-      }
-      return rule.cssText;
-    }).join("\n");
-    return serialize(sheet.cssRules);
-  } catch {
-    return "";
-  }
+function isHTMLElement(target: EventTarget | Node | null): target is HTMLElement {
+  return Boolean(target && typeof (target as Node).instanceOf === "function" && (target as Node).instanceOf(HTMLElement));
 }
 
 interface TaskDraft {
@@ -158,7 +109,7 @@ class ConfirmGroupDeleteModal extends Modal {
 function serializeInlineMarkdown(root: HTMLElement): string {
   const serialize = (node: Node): string => {
     if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
-    if (!(node instanceof HTMLElement)) return "";
+    if (!node.instanceOf(HTMLElement)) return "";
     const inner = Array.from(node.childNodes).map(serialize).join("");
     switch (node.tagName) {
       case "STRONG": case "B": return `**${inner}**`;
@@ -305,7 +256,7 @@ export class CalmTasksView extends ItemView {
       event.preventDefault();
       event.stopImmediatePropagation();
       const direction = isUp ? -1 : 1;
-      if (this.taskDraft && (this.taskDraftCompositionInProgress || event.isComposing || event.keyCode === 229)) {
+      if (this.taskDraft && (this.taskDraftCompositionInProgress || event.isComposing)) {
         this.taskDraftCompositionInProgress = true;
         this.queuedTaskDraftMove = direction;
         return;
@@ -313,7 +264,7 @@ export class CalmTasksView extends ItemView {
       this.moveSelectionFromViewShortcut(direction);
     }, { capture: true });
     const dismissFromExternalTarget = (target: EventTarget | null): void => {
-      if (!(target instanceof HTMLElement)) return;
+      if (!isHTMLElement(target)) return;
       if (target.closest(".calm-task, .calm-detail")) return;
       if (target.closest(".menu, .menu-item, .suggestion-container")) return;
       this.dismissTaskFocus();
@@ -339,12 +290,11 @@ export class CalmTasksView extends ItemView {
 
   applyAppearanceSettings(): void {
     const root = this.contentEl;
-    root.style.setProperty("--calm-task-spacing", `${this.getSettings().taskSpacingPx}px`);
-    root.style.setProperty("--calm-task-line-height", `${this.getSettings().taskLineHeightPx}px`);
-    root.style.setProperty("--calm-subtask-circle-opacity", String(this.getSettings().subtaskCircleOpacityPercent / 100));
-    root.querySelector(":scope > style.calm-user-css")?.remove();
-    const customCss = scopedWorkspaceCss(this.getSettings().customCss);
-    if (customCss) root.createEl("style", { cls: "calm-user-css", text: customCss });
+    root.setCssProps({
+      "--calm-task-spacing": `${this.getSettings().taskSpacingPx}px`,
+      "--calm-task-line-height": `${this.getSettings().taskLineHeightPx}px`,
+      "--calm-subtask-circle-opacity": String(this.getSettings().subtaskCircleOpacityPercent / 100)
+    });
   }
 
   setDetailPanelEnabled(enabled: boolean): void {
@@ -461,7 +411,7 @@ export class CalmTasksView extends ItemView {
 
   private async renderDetailInto(target: HTMLElement): Promise<void> {
     const version = ++this.detailRenderVersion;
-    const staging = document.createElement("div");
+    const staging = createDiv();
     await this.renderDetail(staging);
     if (version !== this.detailRenderVersion) return;
     target.replaceChildren(...Array.from(staging.childNodes));
@@ -491,7 +441,7 @@ export class CalmTasksView extends ItemView {
     const version = ++this.renderVersion;
     this.rebuildTaskKeyCache();
     this.draftRendered = false;
-    const staging = document.createElement("div");
+    const staging = createDiv();
     this.renderToolbar(staging);
     await this.renderListView(staging);
     if (version !== this.renderVersion) return;
@@ -532,7 +482,7 @@ export class CalmTasksView extends ItemView {
     const version = ++this.renderVersion;
     this.rebuildTaskKeyCache();
     this.draftRendered = false;
-    const staging = document.createElement("div");
+    const staging = createDiv();
     await this.renderListView(staging);
     if (version !== this.renderVersion || !currentWorkspace.isConnected) return;
     const nextWorkspace = staging.querySelector<HTMLElement>(".calm-workspace");
@@ -548,7 +498,7 @@ export class CalmTasksView extends ItemView {
   }
 
   private alignTaskControlsToFirstLine(scope: ParentNode = this.contentEl): void {
-    const rows = scope instanceof HTMLElement && scope.matches(".calm-task")
+    const rows = scope.instanceOf(HTMLElement) && scope.matches(".calm-task")
       ? [scope]
       : Array.from(scope.querySelectorAll<HTMLElement>(".calm-task"));
     const entries = rows.map(row => {
@@ -561,7 +511,7 @@ export class CalmTasksView extends ItemView {
     // Clear all previous adjustments before measuring, then apply all new
     // values afterward. Keeping DOM writes out of the measurement loop avoids
     // a layout pass for every task in large lists.
-    entries.forEach(({ checkbox }) => { checkbox.style.transform = ""; });
+    entries.forEach(({ checkbox }) => checkbox.setCssStyles({ transform: "" }));
     const adjustments = entries.map(({ checkbox, circle, title }) => {
 
       // Measure from the unadjusted control position. A one-character range
@@ -596,7 +546,7 @@ export class CalmTasksView extends ItemView {
       return { checkbox, offset: Math.round(offset * 4) / 4 };
     });
     adjustments.forEach(({ checkbox, offset: rounded }) => {
-      checkbox.style.transform = rounded ? `translateY(${rounded}px)` : "";
+      checkbox.setCssStyles({ transform: rounded ? `translateY(${rounded}px)` : "" });
     });
   }
 
@@ -706,7 +656,7 @@ export class CalmTasksView extends ItemView {
     });
     query.addEventListener("input", updateText);
     if (!locked) {
-      const save = bar.createEl("button", { cls: "clickable-icon calm-save-filter", attr: { "aria-label": "Save as Smart Filter" } });
+      const save = bar.createEl("button", { cls: "clickable-icon calm-save-filter", attr: { "aria-label": "Save as smart filter" } });
       setIcon(save, "bookmark-plus");
       save.addEventListener("click", () => this.startSaveSmartFilter(bar, save));
     }
@@ -728,7 +678,7 @@ export class CalmTasksView extends ItemView {
     shell.addEventListener("contextmenu", event => {
       event.preventDefault();
       const menu = new Menu();
-      menu.addItem(item => item.setTitle("Delete Smart Filter").setIcon("trash-2").onClick(() => void this.removeSmartFilter(filter.id)));
+      menu.addItem(item => item.setTitle("Delete smart filter").setIcon("trash-2").onClick(() => void this.removeSmartFilter(filter.id)));
       menu.showAtMouseEvent(event);
     });
   }
@@ -1141,7 +1091,7 @@ export class CalmTasksView extends ItemView {
 
   private enableGroupDrag(group: TaskGroup, section: HTMLElement, heading: HTMLElement): void {
     heading.addEventListener("pointerdown", event => {
-      if (event.button !== 0 || (event.target instanceof HTMLElement && event.target.closest("button, input, a"))) return;
+      if (event.button !== 0 || (isHTMLElement(event.target) && event.target.closest("button, input, a"))) return;
       const startX = event.clientX;
       const startY = event.clientY;
       const sourceRect = heading.getBoundingClientRect();
@@ -1167,7 +1117,7 @@ export class CalmTasksView extends ItemView {
         const height = overlay.getBoundingClientRect().height;
         const left = Math.max(8, Math.min(sourceRect.left, window.innerWidth - width - 8));
         const top = Math.max(8, Math.min(clientY + 12, window.innerHeight - height - 8));
-        overlay.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+        overlay.setCssStyles({ transform: `translate3d(${left}px, ${top}px, 0)` });
       };
       const updateTarget = (pointer: PointerEvent): void => {
         clearTarget();
@@ -1197,7 +1147,7 @@ export class CalmTasksView extends ItemView {
         overlay.removeClass("has-remove");
         overlay.addClass("calm-group-drag-overlay");
         overlay.querySelectorAll<HTMLElement>("button").forEach(button => button.remove());
-        overlay.style.width = `${sourceRect.width}px`;
+        overlay.setCssStyles({ width: `${sourceRect.width}px` });
         document.body.appendChild(overlay);
         positionOverlay(clientY);
       };
@@ -1495,7 +1445,7 @@ export class CalmTasksView extends ItemView {
     row.dataset.taskPath = task.path;
     row.dataset.taskLine = String(task.line);
     row.dataset.orderScope = orderScope;
-    row.style.setProperty("--task-depth", String(Math.min(depth, 6)));
+    row.setCssProps({ "--task-depth": String(Math.min(depth, 6)) });
     if (groupable) {
       row.dataset.groupable = "true";
     }
@@ -1512,7 +1462,7 @@ export class CalmTasksView extends ItemView {
     const content = row.createDiv({ cls: "calm-task-content" });
     const displayTitle = visibleTaskTitle(task.title);
     const title = content.createDiv({ cls: `calm-task-title markdown-rendered ${displayTitle ? "" : "is-empty-title"}`, attr: { contenteditable: "true", spellcheck: "true" } });
-    if (/[*_~`=\[\]<>#\\]|https?:\/\//u.test(displayTitle)) {
+    if (/[*_~`=<>#\\]|https?:\/\//u.test(displayTitle) || displayTitle.includes("[") || displayTitle.includes("]")) {
       await MarkdownRenderer.render(this.app, displayTitle, title, task.path, this);
     } else {
       title.setText(displayTitle);
@@ -1545,7 +1495,7 @@ export class CalmTasksView extends ItemView {
     sourceName.addEventListener("click", event => { event.stopPropagation(); void this.openSource(task); });
     this.enableUnifiedTaskGesture(task, row, title, groupable, orderScope, canChangeGroup);
     row.addEventListener("keydown", event => {
-      if (title.contains(event.target as Node) || (event.target instanceof HTMLElement && event.target.closest('[contenteditable="true"]'))) return;
+      if (title.contains(event.target as Node) || (isHTMLElement(event.target) && event.target.closest('[contenteditable="true"]'))) return;
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
       this.selectTask(task, groupable, event.shiftKey, orderScope);
@@ -1570,7 +1520,7 @@ export class CalmTasksView extends ItemView {
   }
 
   private async replaceDraftRowWithPending(wrapper: HTMLElement, task: TaskItem, depth: number, orderScope: string, canChangeGroup: boolean, focusOffset?: number): Promise<void> {
-    const holder = document.createElement("div");
+    const holder = createDiv();
     await this.renderTask(holder, task, depth, true, orderScope, canChangeGroup, true);
     const rendered = holder.firstElementChild as HTMLElement | null;
     if (!rendered || !wrapper.isConnected) return;
@@ -1760,7 +1710,7 @@ export class CalmTasksView extends ItemView {
       (["A", "B", "C", "D"] as const).forEach(priority => {
         menu.addItem(item => item.setTitle(`Move to ${priority}`).setIcon("signal-high").onClick(() => void this.setSelectedTasksPriority(keys, priority)));
       });
-      menu.addItem(item => item.setTitle("Move to None").setIcon("circle-minus").onClick(() => void this.setSelectedTasksPriority(keys, undefined)));
+      menu.addItem(item => item.setTitle("Move to none").setIcon("circle-minus").onClick(() => void this.setSelectedTasksPriority(keys, undefined)));
       menu.showAtMouseEvent(event);
       return;
     }
@@ -1773,7 +1723,7 @@ export class CalmTasksView extends ItemView {
       menu.showAtMouseEvent(event);
       return;
     }
-    menu.addItem(item => item.setTitle("Move to Inbox").setIcon("inbox").onClick(() => void this.moveTaskKeys(keys, "__inbox__", undefined, false, true)));
+    menu.addItem(item => item.setTitle("Move to inbox").setIcon("inbox").onClick(() => void this.moveTaskKeys(keys, "__inbox__", undefined, false, true)));
     this.getSettings().groups.forEach(group => {
       menu.addItem(item => item.setTitle(`Move to ${group.name}`).setIcon("folder-input").onClick(() => void this.moveTaskKeys(keys, group.id, undefined, false, true)));
     });
@@ -2001,7 +1951,7 @@ export class CalmTasksView extends ItemView {
   private renderTaskDraft(container: HTMLElement, draft: TaskDraft, depth: number): void {
     const wrapper = container.createDiv({ cls: "calm-task-wrap calm-task-draft-wrap" });
     const row = wrapper.createDiv({ cls: "calm-task calm-task-draft is-selected", attr: { "data-depth": String(Math.min(depth, 6)) } });
-    row.style.setProperty("--task-depth", String(Math.min(depth, 6)));
+    row.setCssProps({ "--task-depth": String(Math.min(depth, 6)) });
     const disclosure = row.createEl("button", { cls: "calm-disclosure is-hidden", attr: { tabindex: "-1", "aria-hidden": "true" } });
     setIcon(disclosure, "chevron-down");
     const checkbox = row.createEl("button", { cls: "calm-checkbox", attr: { tabindex: "-1" } });
@@ -2092,7 +2042,7 @@ export class CalmTasksView extends ItemView {
         title.removeClass("calm-task-draft-title");
         title.addClass("calm-task-pending-title", "markdown-rendered");
         title.setAttribute("contenteditable", "false");
-        const holder = document.createElement("div");
+        const holder = createDiv();
         this.renderTaskDraft(holder, this.taskDraft, depth);
         const nextWrapper = holder.firstElementChild;
         if (nextWrapper) wrapper.after(nextWrapper);
@@ -2287,16 +2237,20 @@ export class CalmTasksView extends ItemView {
   private enableUnifiedTaskGesture(task: TaskItem, row: HTMLElement, title: HTMLElement, groupable: boolean, sourceScope: string, canChangeGroup: boolean): void {
     const key = this.taskGroupKey(task);
     let suppressClick = false;
-    const isControl = (target: EventTarget | null): boolean => target instanceof HTMLElement && Boolean(target.closest("button, a, input"));
+    const isControl = (target: EventTarget | null): boolean => isHTMLElement(target) && Boolean(target.closest("button, a, input"));
     const focusTitle = (clientX?: number, clientY?: number): void => {
       title.focus({ preventScroll: true });
       const selection = window.getSelection();
       if (!selection) return;
       let range: Range | null = null;
       if (clientX !== undefined && clientY !== undefined) {
-        const caretDocument = document as Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null };
-        const candidate = caretDocument.caretRangeFromPoint?.(clientX, clientY) ?? null;
-        if (candidate && title.contains(candidate.startContainer)) range = candidate;
+        const caretDocument = document as Document & { caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null };
+        const position = caretDocument.caretPositionFromPoint?.(clientX, clientY);
+        if (position && title.contains(position.offsetNode)) {
+          range = document.createRange();
+          range.setStart(position.offsetNode, position.offset);
+          range.collapse(true);
+        }
       }
       if (!range) {
         range = document.createRange();
@@ -2371,7 +2325,7 @@ export class CalmTasksView extends ItemView {
         const height = dragOverlay.getBoundingClientRect().height;
         const left = Math.max(8, Math.min(sourceLeft, window.innerWidth - width - 8));
         const top = Math.max(8, Math.min(clientY + 14, window.innerHeight - height - 8));
-        dragOverlay.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+        dragOverlay.setCssStyles({ transform: `translate3d(${left}px, ${top}px, 0)` });
       };
       const removeOverlay = (): void => {
         dragOverlay?.remove();
@@ -2441,12 +2395,14 @@ export class CalmTasksView extends ItemView {
         dragOverlay.removeAttribute("tabindex");
         dragOverlay.removeAttribute("data-task-key");
         dragOverlay.dataset.depth = "0";
-        dragOverlay.style.setProperty("--task-depth", "0");
         const rowStyle = window.getComputedStyle(row);
-        dragOverlay.style.setProperty("--calm-task-spacing", rowStyle.getPropertyValue("--calm-task-spacing").trim() || "3px");
-        dragOverlay.style.setProperty("--calm-task-line-height", rowStyle.getPropertyValue("--calm-task-line-height").trim() || "15px");
-        dragOverlay.style.setProperty("--calm-subtask-circle-opacity", rowStyle.getPropertyValue("--calm-subtask-circle-opacity").trim() || ".4");
-        dragOverlay.style.width = `${row.getBoundingClientRect().width}px`;
+        dragOverlay.setCssProps({
+          "--task-depth": "0",
+          "--calm-task-spacing": rowStyle.getPropertyValue("--calm-task-spacing").trim() || "3px",
+          "--calm-task-line-height": rowStyle.getPropertyValue("--calm-task-line-height").trim() || "15px",
+          "--calm-subtask-circle-opacity": rowStyle.getPropertyValue("--calm-subtask-circle-opacity").trim() || ".4"
+        });
+        dragOverlay.setCssStyles({ width: `${row.getBoundingClientRect().width}px` });
         dragOverlay.querySelectorAll<HTMLElement>("[contenteditable]").forEach(element => element.setAttribute("contenteditable", "false"));
         const count = this.selectedKeys.size;
         if (count > 1) dragOverlay.createSpan({ cls: "calm-drag-count", text: String(count) });
@@ -2520,7 +2476,7 @@ export class CalmTasksView extends ItemView {
   private captureEditingCaret(): void {
     this.restoreEditingCaret = undefined;
     const active = document.activeElement;
-    const title = active instanceof HTMLElement && active.matches('.calm-task-title[contenteditable="true"]') ? active : undefined;
+    const title = active?.instanceOf(HTMLElement) && active.matches('.calm-task-title[contenteditable="true"]') ? active : undefined;
     const row = title?.closest<HTMLElement>(".calm-task");
     const taskKey = row?.dataset.taskKey;
     const selection = window.getSelection();
@@ -2584,7 +2540,6 @@ export class CalmTasksView extends ItemView {
     const y = direction < 0 ? Math.max(bounds.top + 1, bounds.bottom - lineHeight / 2) : Math.min(bounds.bottom - 1, bounds.top + lineHeight / 2);
     const caretDocument = document as Document & {
       caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
-      caretRangeFromPoint?: (x: number, y: number) => Range | null;
     };
     let range: Range | null = null;
     const position = caretDocument.caretPositionFromPoint?.(x, y);
@@ -2592,9 +2547,6 @@ export class CalmTasksView extends ItemView {
       range = document.createRange();
       range.setStart(position.offsetNode, position.offset);
       range.collapse(true);
-    } else {
-      const pointRange = caretDocument.caretRangeFromPoint?.(x, y) ?? null;
-      if (pointRange && target.contains(pointRange.startContainer)) range = pointRange;
     }
     if (!range) {
       range = document.createRange();
@@ -2915,7 +2867,7 @@ export class CalmTasksView extends ItemView {
         const value = input.value.trim();
         if (value === (task.dates.due ?? "")) return;
         if (value && !isValidIsoDate(value)) {
-          new Notice("Enter the due date as YYYY-MM-DD.");
+          new Notice("Enter a valid due date in YYYY-MM-DD format.");
           input.value = task.dates.due ?? "";
           return;
         }

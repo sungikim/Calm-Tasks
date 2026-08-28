@@ -52,7 +52,6 @@ export interface CalmTasksSettings {
   preserveDailyNoteTaskPlacement: boolean;
   showDetailPanel: boolean;
   detailPanelPosition: "right" | "bottom";
-  customCss: string;
   groups: TaskGroup[];
   groupAssignments: Record<string, string>;
   fileGroupAssignments: Record<string, string>;

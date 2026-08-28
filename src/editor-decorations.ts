@@ -145,18 +145,16 @@ export function decorateRenderedTaskMetadata(root: HTMLElement): void {
         .filter(range => range.from < range.to)
         .sort((a, b) => a.from - b.from);
       if (!overlaps.length || !entry.node.parentNode) return;
-      const fragment = document.createDocumentFragment();
+      const fragment = createSpan();
       let cursor = 0;
       overlaps.forEach(range => {
         if (range.from > cursor) fragment.append(entry.node.data.slice(cursor, range.from));
-        const span = document.createElement("span");
-        span.className = range.className;
-        span.textContent = entry.node.data.slice(range.from, range.to);
+        const span = createSpan({ cls: range.className, text: entry.node.data.slice(range.from, range.to) });
         fragment.append(span);
         cursor = range.to;
       });
       if (cursor < entry.node.data.length) fragment.append(entry.node.data.slice(cursor));
-      entry.node.replaceWith(fragment);
+      entry.node.replaceWith(...Array.from(fragment.childNodes));
     });
     item.dataset.calmMetadataStyled = "true";
   });

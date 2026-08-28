@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, WorkspaceLeaf } from "obsidian";
+import { App, Plugin, PluginSettingTab, Setting } from "obsidian";
 import { TaskStore } from "./task-store";
 import { CalmTasksView, VIEW_TYPE_CALM_TASKS } from "./task-view";
 import { CalmTasksSettings } from "./types";
@@ -19,7 +19,6 @@ const DEFAULT_SETTINGS: CalmTasksSettings = {
   preserveDailyNoteTaskPlacement: false,
   showDetailPanel: true,
   detailPanelPosition: "bottom",
-  customCss: "",
   groups: [],
   groupAssignments: {},
   fileGroupAssignments: {},
@@ -34,8 +33,9 @@ export default class CalmTasksPlugin extends Plugin {
   override async onload(): Promise<void> {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<CalmTasksSettings>);
     this.settings.smartFilters.forEach(filter => {
-      if (["calendar", "today", "upcoming"].includes(filter.mode as string)) filter.mode = "agenda";
-      if ((filter.mode as string) === "completed") {
+      const savedMode = String(filter.mode);
+      if (["calendar", "today", "upcoming"].includes(savedMode)) filter.mode = "agenda";
+      if (savedMode === "completed") {
         filter.mode = "all";
         filter.filters.status = "done";
       }
@@ -47,7 +47,7 @@ export default class CalmTasksPlugin extends Plugin {
     this.registerMarkdownPostProcessor(element => decorateRenderedTaskMetadata(element));
     this.registerView(VIEW_TYPE_CALM_TASKS, leaf => new CalmTasksView(leaf, this.store, () => this.settings, () => this.saveSettings()));
     this.addRibbonIcon("circle-check-big", "Open Calm Tasks", () => void this.activateView());
-    this.addCommand({ id: "open-task-workspace", name: "Open Task Workspace", callback: () => void this.activateView() });
+    this.addCommand({ id: "open-task-workspace", name: "Open task workspace", callback: () => void this.activateView() });
     this.addCommand({
       id: "move-selected-task-up",
       name: "Move selected task up",
@@ -83,15 +83,17 @@ export default class CalmTasksPlugin extends Plugin {
   applyMarkdownCompletedStyleSetting(): void {
     document.body.toggleClass("calm-highlight-task-metadata-in-notes", this.settings.highlightTaskMetadataInMarkdown);
     document.body.toggleClass("calm-dim-completed-markdown-tasks", this.settings.dimCompletedTasksInMarkdown);
-    document.body.style.setProperty("--calm-completed-metadata-opacity", String(this.settings.completedMetadataOpacityPercent / 100));
-    document.body.style.setProperty("--calm-completed-metadata-opacity-percent", `${this.settings.completedMetadataOpacityPercent}%`);
+    document.body.setCssProps({
+      "--calm-completed-metadata-opacity": String(this.settings.completedMetadataOpacityPercent / 100),
+      "--calm-completed-metadata-opacity-percent": `${this.settings.completedMetadataOpacityPercent}%`
+    });
   }
 
   async activateView(): Promise<void> {
     const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_CALM_TASKS)[0];
-    const leaf = existing ?? this.app.workspace.getLeaf("tab");
+    const leaf = existing ?? this.app.workspace.getLeaf(true);
     if (!existing) await leaf.setViewState({ type: VIEW_TYPE_CALM_TASKS, active: true });
-    this.app.workspace.revealLeaf(leaf);
+    this.app.workspace.setActiveLeaf(leaf, { focus: true });
   }
 
   async saveSettings(refreshStore = false): Promise<void> {
@@ -104,8 +106,6 @@ export default class CalmTasksPlugin extends Plugin {
 }
 
 class CalmTasksSettingTab extends PluginSettingTab {
-  private customCssSaveTimer?: number;
-
   constructor(app: App, private plugin: CalmTasksPlugin) { super(app, plugin); }
 
   override display(): void {
@@ -113,14 +113,12 @@ class CalmTasksSettingTab extends PluginSettingTab {
     this.containerEl.addClass("calm-settings");
     const createGroup = (title: string, description: string): HTMLElement => {
       const section = this.containerEl.createDiv({ cls: "calm-settings-section" });
-      section.createEl("h2", { text: title });
-      section.createDiv({ cls: "calm-settings-section-description", text: description });
+      new Setting(section).setName(title).setDesc(description).setHeading();
       return section.createDiv({ cls: "calm-settings-card" });
     };
     const appearance = createGroup("Appearance", "Adjust the density and visual weight of task rows.");
     const details = createGroup("Details", "Choose when and where the selected task's details appear.");
     const behavior = createGroup("Task behavior", "Configure task ranges, storage, and Vault scanning.");
-    const customStyle = createGroup("Custom CSS", "Fine-tune only the dedicated Calm Tasks workspace. Selectors are automatically scoped and do not affect regular notes.");
 
     new Setting(appearance).setName("Task vertical spacing").setDesc("Extra space above and below each task row, in pixels (0–20).").addText(text => text
       .setPlaceholder("3").setValue(String(this.plugin.settings.taskSpacingPx)).onChange(async value => {
@@ -186,7 +184,7 @@ class CalmTasksSettingTab extends PluginSettingTab {
           if (leaf.view instanceof CalmTasksView) leaf.view.setDetailPanelPosition();
         });
       }));
-    new Setting(behavior).setName("Upcoming range").setDesc("Number of days shown in Upcoming.").addText(text => text
+    new Setting(behavior).setName("Upcoming range").setDesc("Number of days shown in upcoming.").addText(text => text
       .setPlaceholder("14").setValue(String(this.plugin.settings.upcomingDays)).onChange(async value => {
         const parsed = Number.parseInt(value, 10);
         if (Number.isFinite(parsed) && parsed > 0) {
@@ -219,7 +217,7 @@ class CalmTasksSettingTab extends PluginSettingTab {
         });
       });
     });
-    new Setting(behavior).setName("Preserve Daily Note placement").setDesc("When an unchanged task moves between YYYY-MM-DD notes in either direction, preserve its All-view group and order.").addToggle(toggle => toggle
+    new Setting(behavior).setName("Preserve daily note placement").setDesc("When an unchanged task moves between dated daily notes in either direction, preserve its all-view group and order.").addToggle(toggle => toggle
       .setValue(this.plugin.settings.preserveDailyNoteTaskPlacement).onChange(async value => {
         this.plugin.settings.preserveDailyNoteTaskPlacement = value;
         await this.plugin.saveSettings();
@@ -227,37 +225,16 @@ class CalmTasksSettingTab extends PluginSettingTab {
           if (leaf.view instanceof CalmTasksView) leaf.view.refreshWorkspace();
         });
       }));
-    new Setting(behavior).setClass("calm-setting-wide").setName("New task file").setDesc("Vault-relative Markdown file used for tasks created with Enter in Calm Tasks.").addText(text => text
+    new Setting(behavior).setClass("calm-setting-wide").setName("New task file").setDesc("Vault-relative Markdown file used for tasks created in Calm Tasks.").addText(text => text
       .setPlaceholder("Tasks/Calm Tasks.md").setValue(this.plugin.settings.newTaskFile).onChange(async value => {
         this.plugin.settings.newTaskFile = value.trim();
         await this.plugin.saveSettings(true);
       }));
     new Setting(behavior).setName("Excluded folders").setDesc("Comma-separated vault folders that Calm Tasks should ignore.").addText(text => text
-      .setPlaceholder(".trash, Templates").setValue(this.plugin.settings.excludedFolders.join(", ")).onChange(async value => {
+      .setPlaceholder(".trash, templates").setValue(this.plugin.settings.excludedFolders.join(", ")).onChange(async value => {
         this.plugin.settings.excludedFolders = value.split(",").map(item => item.trim().replace(/^\/+|\/+$/g, "")).filter(Boolean);
         await this.plugin.saveSettings(true);
       }));
-    new Setting(customStyle).setClass("calm-setting-wide").setClass("calm-setting-custom-css")
-      .setName("Workspace CSS")
-      .setDesc("Enter standard CSS rules. For example: .calm-group-title { letter-spacing: 0.02em; }")
-      .addTextArea(area => {
-        area.setPlaceholder(".calm-task-title {\n  font-size: 13px;\n}");
-        area.setValue(this.plugin.settings.customCss);
-        area.inputEl.rows = 12;
-        area.inputEl.spellcheck = false;
-        area.onChange(value => {
-          this.plugin.settings.customCss = value;
-          this.app.workspace.getLeavesOfType(VIEW_TYPE_CALM_TASKS).forEach(leaf => {
-            if (leaf.view instanceof CalmTasksView) leaf.view.applyAppearanceSettings();
-          });
-          if (this.customCssSaveTimer) window.clearTimeout(this.customCssSaveTimer);
-          this.customCssSaveTimer = window.setTimeout(() => {
-            this.customCssSaveTimer = undefined;
-            void this.plugin.saveSettings();
-          }, 200);
-        });
-      });
-
     const supportCard = createGroup("Support", "If Calm Tasks helps you stay organized, a small coffee helps keep its development going.");
     const support = supportCard.createDiv({ cls: "calm-settings-support" });
     support.createDiv({

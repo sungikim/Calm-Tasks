@@ -422,13 +422,9 @@ body.calm-dim-completed-markdown-tasks .markdown-preview-view li.task-list-item.
 
 .calm-settings { max-width: 900px; padding-bottom: 36px; }
 .calm-settings-section { margin: 0 0 28px; }
-.calm-settings-section > h2 {
-  width: 100%; margin: 0 0 3px !important; padding: 0 !important; color: var(--text-normal);
-  font-size: 18px; font-weight: 650; text-align: left; text-indent: 0;
-}
-.calm-settings-section-description {
-  width: 100%; margin: 0 0 11px !important; padding: 0 !important; color: var(--text-muted);
-  font-size: 12px; line-height: 1.45; text-align: left; text-indent: 0;
+.calm-settings .calm-settings-section > .setting-item-heading {
+  width: 100%; margin: 0 0 11px; padding: 0; border: 0; color: var(--text-normal);
+  text-align: left;
 }
 .calm-settings-card {
   padding: 0 18px; overflow: hidden; border: 1px solid var(--background-modifier-border);
@@ -449,10 +445,6 @@ body.calm-dim-completed-markdown-tasks .markdown-preview-view li.task-list-item.
 .calm-settings-card .calm-setting-wide .setting-item-control { width: 100%; }
 .calm-settings-card .calm-setting-wide .setting-item-control { justify-content: stretch; }
 .calm-settings-card .calm-setting-wide input[type="text"] { width: 100%; max-width: none; box-sizing: border-box; }
-.calm-settings-card .calm-setting-custom-css textarea {
-  width: 100%; min-height: 220px; max-width: none; padding: 10px 12px; box-sizing: border-box; resize: vertical;
-  font-family: var(--font-monospace); font-size: 12px; line-height: 1.5; tab-size: 2;
-}
 .calm-settings-support {
   display: flex; flex-direction: column; align-items: center; gap: 13px; padding: 22px 16px 24px;
   color: var(--text-muted); text-align: center;

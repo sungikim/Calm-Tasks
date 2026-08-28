@@ -21,7 +21,7 @@ Calm Tasks는 Org mode의 평문 중심 철학을 Obsidian에 맞게 더 작고 
 - 선택한 Task를 수정하는 하단 또는 우측 Details 패널
 - 일반 Markdown 노트에서도 Task의 날짜와 우선순위를 자동으로 컬러 표시
 - 설정한 일괄 보관 시간까지 완료 Task를 작업 화면에 유지
-- 행 간격, 줄 높이, 색상과 작업 화면 전용 Custom CSS 설정
+- 행 간격, 줄 높이와 Task 메타데이터 색상 설정
 
 사용자 그룹을 삭제해도 Task는 삭제되지 않고 Inbox로 이동합니다.
 
@@ -83,7 +83,7 @@ Obsidian을 다시 불러오고 **설정 → 커뮤니티 플러그인**에서 C
 
 ## 테마 호환성
 
-Calm Tasks는 Minimal 테마와 개인 CSS 환경을 중심으로 테스트했습니다. 다른 테마에서는 작업 화면 Custom CSS 설정을 통한 작은 조정이 필요할 수 있습니다.
+Calm Tasks는 Minimal 테마를 중심으로 테스트했습니다. 테마별 조정이 필요하면 Obsidian의 기본 CSS snippets 기능을 사용하세요.
 
 ## 라이선스
 
