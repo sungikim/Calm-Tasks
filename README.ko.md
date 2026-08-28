@@ -4,7 +4,7 @@
 
 Obsidian Vault의 여러 Markdown 파일에 흩어진 할 일을 한곳에 모아주는 조용한 작업 공간입니다.
 
-[Calm Tasks 웹사이트에서 상세 소개와 전체 기능을 확인하세요.](https://sungikim.github.io/Calm-Tasks/)
+자세한 소개는 [웹사이트](https://sungikim.github.io/Calm-Tasks/)에서 확인하세요.
 
 [![Calm Tasks 작업 화면](docs/assets/all-workspace.png)](https://sungikim.github.io/Calm-Tasks/)
 

@@ -4,7 +4,7 @@
 
 A quiet task workspace that collects Markdown tasks from across your Obsidian vault.
 
-[View the full introduction and feature guide on the Calm Tasks website.](https://sungikim.github.io/Calm-Tasks/)
+See the [website](https://sungikim.github.io/Calm-Tasks/) for a detailed introduction.
 
 [![Calm Tasks workspace](docs/assets/all-workspace.png)](https://sungikim.github.io/Calm-Tasks/)
 
