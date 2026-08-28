@@ -1,4 +1,4 @@
-const REPOSITORY_URL = "https://github.com/sungikim/calm-tasks";
+const REPOSITORY_URL = "https://github.com/sungikim/Calm-Tasks";
 
 document.querySelectorAll("[data-repo-link]").forEach(link => {
   link.href = REPOSITORY_URL;
