@@ -1,21 +1,45 @@
-MIT License
+Calm Tasks Source License 1.0
 
-Copyright (c) 2026 sungikim
+Copyright (c) 2026 Calm Tasks author. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. Free use of the original software
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Permission is granted to use the unmodified Calm Tasks software free of
+charge for personal, educational, organizational, and commercial work. This
+includes using the plugin in a workplace or in connection with work performed
+for compensation.
+
+2. Non-commercial modification
+
+Permission is granted to inspect, copy, and modify the source code, and to use
+or distribute modified or derivative versions, solely for non-commercial
+purposes. Any distribution must retain this license and the copyright notice,
+clearly state that the software was modified, and must not imply endorsement
+by the original author.
+
+3. Commercial restrictions on modified versions
+
+Without prior written permission from the copyright holder, you may not use,
+sell, license, sublicense, host as a paid service, bundle with a paid product,
+or otherwise commercially exploit any modified or derivative version of the
+software. You may not sell or charge for access to copies of the original
+software either.
+
+4. No trademark rights
+
+This license does not grant permission to use the Calm Tasks name, logo, or
+other branding for a modified or derivative version, except as needed to
+describe its origin accurately.
+
+5. Warranty disclaimer
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING
+FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OF THE SOFTWARE.
+
+6. Commercial permission
+
+For permission to use a modified or derivative version commercially, contact
+the copyright holder through the repository's listed contact method.

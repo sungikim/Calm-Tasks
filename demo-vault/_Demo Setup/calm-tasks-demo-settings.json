@@ -1,0 +1,126 @@
+{
+  "upcomingDays": 14,
+  "excludedFolders": [
+    ".trash",
+    "_Demo Setup"
+  ],
+  "newTaskFile": "Calm Tasks.md",
+  "taskSpacingPx": 3,
+  "taskLineHeightPx": 15,
+  "subtaskCircleOpacityPercent": 40,
+  "highlightTaskMetadataInMarkdown": true,
+  "dimCompletedTasksInMarkdown": true,
+  "completedMetadataOpacityPercent": 50,
+  "dailyCompletionArchiveEnabled": true,
+  "dailyCompletionArchiveTime": "04:00",
+  "preserveDailyNoteTaskPlacement": false,
+  "showDetailPanel": true,
+  "detailPanelPosition": "bottom",
+  "customCss": "",
+  "groups": [
+    { "id": "demo-personal", "name": "Personal" },
+    { "id": "demo-learning", "name": "Learning" },
+    { "id": "demo-home", "name": "Home" },
+    { "id": "demo-writing", "name": "Writing" },
+    { "id": "demo-work", "name": "Work" },
+    { "id": "demo-ideas", "name": "Ideas" }
+  ],
+  "groupAssignments": {
+    "Daily Notes/2026-08-27.md::outline the demo storyline": "demo-writing",
+    "Daily Notes/2026-08-27.md::clear the downloads folder": "demo-home",
+    "Daily Notes/2026-08-28.md::review yesterday's unfinished list": "demo-personal",
+    "Daily Notes/2026-08-28.md::capture a clean baseline screenshot": "demo-work"
+  },
+  "fileGroupAssignments": {
+    "Demo Notes/Personal Plans.md": "demo-personal",
+    "Demo Notes/Learning Roadmap.md": "demo-learning",
+    "Demo Notes/Home Reset.md": "demo-home",
+    "Demo Notes/Writing Studio.md": "demo-writing",
+    "Demo Notes/Project Launch.md": "demo-work",
+    "Demo Notes/Someday Ideas.md": "demo-ideas"
+  },
+  "taskOrder": {
+    "__inbox__": [
+      "Calm Tasks.md::review the week and choose one focus",
+      "Calm Tasks.md::sort reference notes into folders",
+      "Calm Tasks.md::decide which idea deserves a prototype",
+      "Calm Tasks.md::archive last month's capture list"
+    ],
+    "demo-personal": [
+      "Demo Notes/Personal Plans.md::book annual health check",
+      "Demo Notes/Personal Plans.md::plan a quiet sunday walk",
+      "Demo Notes/Personal Plans.md::renew library card",
+      "Demo Notes/Personal Plans.md::call a friend after dinner",
+      "Demo Notes/Personal Plans.md::update emergency contact details",
+      "Daily Notes/2026-08-28.md::review yesterday's unfinished list"
+    ],
+    "demo-learning": [
+      "Demo Notes/Learning Roadmap.md::finish accessibility course module #learning",
+      "Demo Notes/Learning Roadmap.md::practice css grid by recreating a dashboard #learning",
+      "Demo Notes/Learning Roadmap.md::read [inclusive components](https://inclusive-components.design/) notes",
+      "Demo Notes/Learning Roadmap.md::summarize notes on local-first interfaces #learning",
+      "Demo Notes/Learning Roadmap.md::organize browser accessibility bookmarks"
+    ],
+    "demo-home": [
+      "Demo Notes/Home Reset.md::restock coffee and pantry basics #home",
+      "Demo Notes/Home Reset.md::replace the desk lamp bulb #home",
+      "Demo Notes/Home Reset.md::clear the kitchen counter",
+      "Demo Notes/Home Reset.md::wash bedding",
+      "Demo Notes/Home Reset.md::recycle empty shipping boxes",
+      "Daily Notes/2026-08-27.md::clear the downloads folder"
+    ],
+    "demo-writing": [
+      "Demo Notes/Writing Studio.md::draft the opening for the monthly essay #writing",
+      "Demo Notes/Writing Studio.md::collect three examples for the article #writing",
+      "Demo Notes/Writing Studio.md::edit the conclusion for clarity #writing",
+      "Demo Notes/Writing Studio.md::publish a short field note",
+      "Demo Notes/Writing Studio.md::choose a working title",
+      "Daily Notes/2026-08-27.md::outline the demo storyline"
+    ],
+    "demo-work": [
+      "Demo Notes/Project Launch.md::send the launch checklist to the team #work",
+      "Demo Notes/Project Launch.md::review onboarding flow copy #work",
+      "Demo Notes/Project Launch.md::prepare friday demo outline #work",
+      "Demo Notes/Project Launch.md::triage low-risk interface issues",
+      "Demo Notes/Project Launch.md::confirm the release folder structure",
+      "Daily Notes/2026-08-28.md::capture a clean baseline screenshot"
+    ],
+    "demo-ideas": [
+      "Demo Notes/Someday Ideas.md::sketch a reading queue widget #ideas",
+      "Demo Notes/Someday Ideas.md::explore a local-first bookmarks page #ideas",
+      "Demo Notes/Someday Ideas.md::make a one-screen travel planner",
+      "Demo Notes/Someday Ideas.md::test a weekly reflection card",
+      "Demo Notes/Someday Ideas.md::remove two duplicate concepts"
+    ]
+  },
+  "smartFilters": [
+    {
+      "id": "demo-this-week",
+      "name": "This week",
+      "mode": "agenda",
+      "completedRange": "all",
+      "filters": { "status": "open", "date": "upcoming", "tag": "", "query": "" }
+    },
+    {
+      "id": "demo-writing-filter",
+      "name": "Writing",
+      "mode": "all",
+      "completedRange": "all",
+      "filters": { "status": "open", "date": "any", "tag": "writing", "query": "" }
+    },
+    {
+      "id": "demo-no-date",
+      "name": "No date",
+      "mode": "all",
+      "completedRange": "all",
+      "filters": { "status": "open", "date": "none", "tag": "", "query": "" }
+    },
+    {
+      "id": "demo-completed",
+      "name": "Completed",
+      "mode": "all",
+      "completedRange": "7days",
+      "filters": { "status": "done", "date": "any", "tag": "", "query": "" }
+    }
+  ]
+}

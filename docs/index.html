@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0e0a15">
+  <meta name="description" content="Calm Tasks is an Obsidian plugin that collects Markdown checkbox tasks into Agenda, Priority, and grouped views.">
+  <meta property="og:title" content="Calm Tasks for Obsidian">
+  <meta property="og:description" content="An Obsidian plugin for reviewing Markdown checkbox tasks by date, priority, or custom group.">
+  <meta property="og:type" content="website">
+  <title>Calm Tasks — A quiet task workspace for Obsidian</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=20260828-14">
+  <script src="site.js?v=20260828-14" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="Calm Tasks home">
+      <span class="brand-mark" aria-hidden="true"><span></span></span>
+      <span>Calm Tasks</span>
+    </a>
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href="#features" data-i18n="nav.features">Features</a>
+      <a href="#views" data-i18n="nav.views">Views</a>
+      <a href="#notes" data-i18n="nav.markdown">Markdown</a>
+      <a data-repo-link href="https://github.com/sungikim/calm-tasks">GitHub</a>
+    </nav>
+    <div class="language-picker">
+      <button class="language-toggle" type="button" data-language-toggle aria-label="Choose language" aria-haspopup="menu" aria-expanded="false">
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="12" cy="12" r="9"></circle>
+          <path d="M3 12h18M12 3c2.4 2.5 3.7 5.5 3.7 9S14.4 18.5 12 21M12 3C9.6 5.5 8.3 8.5 8.3 12s1.3 6.5 3.7 9"></path>
+        </svg>
+      </button>
+      <div class="language-menu" data-language-menu role="menu" hidden>
+        <button type="button" role="menuitemradio" data-language-option="en">English</button>
+        <button type="button" role="menuitemradio" data-language-option="ko">한국어</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top">
+      <div class="hero-copy">
+        <h1 data-i18n-html="hero.title">Calm Tasks<br><span>for Obsidian.</span></h1>
+        <p class="hero-lede" data-i18n="hero.lede">Calm Tasks is an Obsidian plugin that collects checkbox tasks from across your vault. Review them by date, priority, or custom group while the source stays in Markdown.</p>
+        <div class="hero-actions">
+          <a class="button" data-release-link href="https://github.com/sungikim/calm-tasks/releases/latest" data-i18n="hero.download">Download</a>
+          <a class="text-link" data-repo-link href="https://github.com/sungikim/calm-tasks"><span data-i18n="hero.source">Source on GitHub</span> <span aria-hidden="true">↗</span></a>
+        </div>
+        <div class="hero-meta" aria-label="Product highlights">
+          <span data-i18n="hero.meta.plugin">Obsidian plugin</span>
+          <span data-i18n="hero.meta.markdown">Markdown files</span>
+          <span data-i18n="hero.meta.local">Local vault</span>
+        </div>
+      </div>
+
+      <div class="hero-visual">
+        <div class="window-frame">
+          <div class="media-frame media-frame-hero" data-image-src="assets/all-workspace.png" data-image-alt="Calm Tasks All view showing Inbox, Personal, Works, and Chores groups alongside a PARA-style Obsidian vault">
+            <div class="media-placeholder">
+              <strong>All workspace</strong>
+              <code>assets/all-workspace.png</code>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-overview" id="features">
+      <div class="section-heading narrow">
+        <p class="eyebrow" data-i18n="overview.eyebrow">Markdown in, task views out</p>
+        <h2 data-i18n="overview.title">Tasks stay in Markdown.</h2>
+        <p data-i18n="overview.copy">Write ordinary checkbox tasks in project notes, meeting notes, or daily logs. Calm Tasks brings them together without changing the basic file format.</p>
+      </div>
+      <div class="feature-pair">
+        <article class="feature-card feature-card-large">
+          <span class="feature-number">01</span>
+          <h3 data-i18n="overview.collect.title">Collect from the whole vault</h3>
+          <p data-i18n="overview.collect.copy">Tasks from project files, area notes, and daily logs appear in one plugin view. The source filename remains visible on each row.</p>
+          <div class="source-stack" aria-hidden="true">
+            <span>Project Launch.md</span>
+            <span>Learning Roadmap.md</span>
+            <span>2026-08-28.md</span>
+          </div>
+        </article>
+        <article class="feature-card feature-card-accent">
+          <span class="feature-number">02</span>
+          <h3 data-i18n="overview.groups.title">Use your own groups</h3>
+          <p data-i18n="overview.groups.copy">Keep an Inbox, create named groups, and set a manual order without moving the source text out of Markdown.</p>
+          <div class="group-preview" aria-hidden="true">
+            <span>Personal</span><span>Works</span><span>Chores</span><span>Hobby</span>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section video-section" id="overview-video">
+      <div class="video-copy">
+        <p class="eyebrow" data-i18n="video.eyebrow">Overview</p>
+        <h2 data-i18n="video.title">A short walkthrough.</h2>
+        <p data-i18n="video.copy">This video shows the main workflow from collecting tasks to editing and completing them.</p>
+        <ul class="check-list">
+          <li data-i18n="video.item.open">Open the Calm Tasks view</li>
+          <li data-i18n="video.item.switch">Switch between the three views</li>
+          <li data-i18n="video.item.edit">Edit, move, and complete tasks</li>
+        </ul>
+      </div>
+      <div class="video-shell" data-video-src="assets/calm-tasks-overview.mp4" data-video-poster="assets/video-poster.webp">
+        <div class="video-placeholder">
+          <span class="play-mark" aria-hidden="true">▶</span>
+          <strong data-i18n="video.placeholder">Product overview video</strong>
+          <code>assets/calm-tasks-overview.mp4</code>
+          <small>60–90 seconds · 16:9 · 1080p</small>
+        </div>
+      </div>
+    </section>
+
+    <section class="section modes-section" id="views">
+      <div class="section-heading split-heading">
+        <div>
+          <p class="eyebrow" data-i18n="views.eyebrow">Views</p>
+          <h2 data-i18n="views.title">Agenda, Priority, and All.</h2>
+        </div>
+        <p data-i18n="views.copy">All handles groups and manual order. Agenda and Priority reorganize the same tasks for a different review.</p>
+      </div>
+
+      <div class="mode-grid mode-grid-two">
+        <article class="mode-card">
+          <div class="mode-label"><span>01</span><h3>Agenda</h3></div>
+          <p data-i18n="views.agenda.copy">Review Today, Tomorrow, and later dates in chronological sections.</p>
+          <div class="media-frame media-frame-card" data-image-src="assets/agenda-view.png" data-image-alt="Calm Tasks Agenda view showing Today, Tomorrow, August 31, and September 4 sections">
+            <div class="media-placeholder"><strong>Agenda view</strong><code>assets/agenda-view.png</code></div>
+          </div>
+        </article>
+        <article class="mode-card">
+          <div class="mode-label"><span>02</span><h3>Priority</h3></div>
+          <p data-i18n="views.priority.copy">Review A–D priorities, with unranked work listed under None.</p>
+          <div class="media-frame media-frame-card" data-image-src="assets/priority-view.png" data-image-alt="Calm Tasks Priority view showing A, B, C, D, and None sections">
+            <div class="media-placeholder"><strong>Priority view</strong><code>assets/priority-view.png</code></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section note-section" id="notes">
+      <div class="note-copy">
+        <p class="eyebrow" data-i18n="notes.eyebrow">Regular Markdown notes</p>
+        <h2 data-i18n="notes.title">Task metadata stays visible in the note.</h2>
+        <p data-i18n="notes.copy">Calm Tasks can highlight dates and A–D priorities in ordinary Markdown notes, not only in the dedicated task view. The highlighting can be turned off in plugin settings.</p>
+        <pre><code>- [ ] Prepare the launch brief | 2026-09-03 | A
+- [ ] Review the backlog | B
+- [ ] Book an appointment | B | 2026-09-05</code></pre>
+        <p class="note-setting" data-i18n="notes.daily">Daily Note tasks are collected in the same views. An optional setting can preserve a task's All-view placement when it moves between dated notes.</p>
+      </div>
+    </section>
+
+    <section class="section details-section" id="features-detail">
+      <div class="section-heading narrow">
+        <p class="eyebrow" data-i18n="tools.eyebrow">Focused tools</p>
+        <h2 data-i18n="tools.title">Save a filter. Open task details.</h2>
+      </div>
+      <div class="detail-grid detail-grid-two">
+        <article class="detail-card">
+          <div class="detail-label"><span>01</span><h3 data-i18n="tools.filters.title">Smart Filters</h3></div>
+          <p data-i18n="tools.filters.copy">Combine status, date, tag, and keyword filters. Save a useful combination as a tab for quick reuse.</p>
+          <div class="media-frame media-frame-detail" data-image-src="assets/smart-filters.png" data-image-alt="Calm Tasks Review Smart Filter showing matching tasks across several groups">
+            <div class="media-placeholder"><strong>Smart Filters</strong><code>assets/smart-filters.png</code></div>
+          </div>
+        </article>
+        <article class="detail-card">
+          <div class="detail-label"><span>02</span><h3 data-i18n="tools.details.title">Details panel</h3></div>
+          <p data-i18n="tools.details.copy">Open task details on the right or at the bottom, then edit the title, date, priority, tags, source, and notes.</p>
+          <div class="media-frame media-frame-detail" data-image-src="assets/task-details.png?v=20260828-5" data-image-alt="Calm Tasks All view with the selected task's Details panel open on the right">
+            <div class="media-placeholder"><strong>Details panel</strong><code>assets/task-details.png</code></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section final-cta">
+      <div>
+        <p class="eyebrow">Calm Tasks 0.1.1</p>
+        <h2 data-i18n="cta.title">An Obsidian plugin for Markdown tasks.</h2>
+        <p data-i18n="cta.copy">Free to use. Tested primarily with the Minimal theme.</p>
+      </div>
+      <div class="cta-actions">
+        <a class="button" data-release-link href="https://github.com/sungikim/calm-tasks/releases/latest" data-i18n="cta.download">Download Calm Tasks</a>
+        <a class="text-link" href="https://buymeacoffee.com/sungikimi"><span data-i18n="cta.support">Support development</span> <span aria-hidden="true">↗</span></a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-brand">
+      <span class="brand-mark" aria-hidden="true"><span></span></span>
+      <div><b>Calm Tasks</b><span data-i18n="footer.tagline">An Obsidian plugin for Markdown tasks.</span></div>
+    </div>
+    <div class="footer-links">
+      <a data-repo-link href="https://github.com/sungikim/calm-tasks">GitHub</a>
+      <a data-readme-link href="https://github.com/sungikim/calm-tasks#readme" data-i18n="footer.docs">Documentation</a>
+      <a href="https://buymeacoffee.com/sungikimi">Buy Me a Coffee</a>
+    </div>
+    <p data-i18n="footer.note">Built for plain Markdown. Tested primarily with the Minimal theme.</p>
+  </footer>
+
+  <dialog class="image-modal" data-image-modal aria-labelledby="image-modal-title">
+    <h2 class="sr-only" id="image-modal-title" data-i18n="modal.title">Enlarged screenshot</h2>
+    <button class="image-modal-close" type="button" data-image-modal-close data-i18n="modal.close">Close</button>
+    <img data-image-modal-image alt="">
+  </dialog>
+</body>
+</html>
