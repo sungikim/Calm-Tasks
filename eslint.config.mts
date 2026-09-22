@@ -6,6 +6,7 @@ export default defineConfig(
   globalIgnores([
     "node_modules",
     "docs",
+    "release",
     "main.js",
     "esbuild.mjs",
     "version-bump.mjs",
@@ -30,8 +31,8 @@ export default defineConfig(
   {
     rules: {
       "obsidianmd/ui/sentence-case": ["warn", {
-        brands: ["Calm Tasks", "Buy Me a Coffee", "Markdown"],
-        acronyms: ["YYYY-MM-DD"],
+        brands: ["Calm Tasks", "Buy Me a Coffee", "Markdown", "Microsoft", "Microsoft To Do", "Microsoft Entra", "Obsidian", "MS-ToDo", "10 🙂 Life/93 ✉️ Daily note", "Tasks.ReadWrite"],
+        acronyms: ["YYYY-MM-DD", "ID", "URL", "API"],
         enforceCamelCaseLower: true
       }]
     }

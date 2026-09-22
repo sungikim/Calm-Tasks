@@ -1,10 +1,17 @@
-import { App, Plugin, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, Plugin, PluginSettingTab, Setting, TFolder } from "obsidian";
 import { TaskStore } from "./task-store";
 import { CalmTasksView, VIEW_TYPE_CALM_TASKS } from "./task-view";
 import { CalmTasksSettings } from "./types";
 import { calmTaskEditorExtension, decorateRenderedTaskMetadata } from "./editor-decorations";
+import { DEFAULT_SETTINGS as DEFAULT_SYNC_SETTINGS } from "./sync/types";
+import { MicrosoftSyncCoordinator } from "./sync/coordinator";
+
+function normalizeDailyNotesBaseFolder(value: string): string {
+  return value.trim().replace(/^\/+|\/+$/gu, "").replace(/\/(?:19|20)\d{2}\/(?:0[1-9]|1[0-2])$/u, "");
+}
 
 const DEFAULT_SETTINGS: CalmTasksSettings = {
+  showPxdTodoFile: true,
   upcomingDays: 14,
   excludedFolders: [".trash"],
   newTaskFile: "Calm Tasks.md",
@@ -17,21 +24,31 @@ const DEFAULT_SETTINGS: CalmTasksSettings = {
   dailyCompletionArchiveEnabled: true,
   dailyCompletionArchiveTime: "04:00",
   preserveDailyNoteTaskPlacement: false,
+  moveTasksToDailyNoteEnabled: false,
+  dailyNotesFolder: "",
+  dailyNoteTaskHeading: "# 오늘의 할 일",
   showDetailPanel: true,
   detailPanelPosition: "bottom",
   groups: [],
   groupAssignments: {},
   fileGroupAssignments: {},
   taskOrder: {},
-  smartFilters: []
+  smartFilters: [],
+  microsoftSync: { ...DEFAULT_SYNC_SETTINGS }
 };
 
 export default class CalmTasksPlugin extends Plugin {
   override settings: CalmTasksSettings = DEFAULT_SETTINGS;
   private store!: TaskStore;
+  syncCoordinator!: MicrosoftSyncCoordinator;
+  private settingsSaveQueue: Promise<void> = Promise.resolve();
 
   override async onload(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<CalmTasksSettings>);
+    const loaded = await this.loadData() as Partial<CalmTasksSettings> | null;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded ?? {}, {
+      microsoftSync: { ...DEFAULT_SYNC_SETTINGS, ...(loaded?.microsoftSync ?? {}), enabled: loaded?.microsoftSync?.enabled ?? false }
+    });
+    this.settings.dailyNotesFolder = normalizeDailyNotesBaseFolder(this.settings.dailyNotesFolder);
     this.settings.smartFilters.forEach(filter => {
       const savedMode = String(filter.mode);
       if (["calendar", "today", "upcoming"].includes(savedMode)) filter.mode = "agenda";
@@ -42,12 +59,14 @@ export default class CalmTasksPlugin extends Plugin {
       if (!["all", "3days", "7days", "30days"].includes(filter.completedRange)) filter.completedRange = "all";
     });
     this.store = new TaskStore(this.app, this.settings);
+    this.syncCoordinator = new MicrosoftSyncCoordinator(this.app, this.store, () => this.settings, () => this.saveSettings());
     this.applyMarkdownCompletedStyleSetting();
     this.registerEditorExtension(calmTaskEditorExtension);
     this.registerMarkdownPostProcessor(element => decorateRenderedTaskMetadata(element));
     this.registerView(VIEW_TYPE_CALM_TASKS, leaf => new CalmTasksView(leaf, this.store, () => this.settings, () => this.saveSettings()));
     this.addRibbonIcon("circle-check-big", "Open Calm Tasks", () => void this.activateView());
     this.addCommand({ id: "open-task-workspace", name: "Open task workspace", callback: () => void this.activateView() });
+    this.addCommand({ id: "sync-microsoft-todo-now", name: "Sync Microsoft To Do now", callback: () => void this.syncCoordinator.syncWithNotice() });
     this.addCommand({
       id: "move-selected-task-up",
       name: "Move selected task up",
@@ -70,10 +89,12 @@ export default class CalmTasksPlugin extends Plugin {
     });
     this.addSettingTab(new CalmTasksSettingTab(this.app, this));
     await this.store.start();
+    await this.syncCoordinator.updateEnabled();
   }
 
   override onunload(): void {
     this.store.stop();
+    this.syncCoordinator.unload();
     document.body.removeClass("calm-highlight-task-metadata-in-notes");
     document.body.removeClass("calm-dim-completed-markdown-tasks");
     document.body.style.removeProperty("--calm-completed-metadata-opacity");
@@ -97,18 +118,24 @@ export default class CalmTasksPlugin extends Plugin {
   }
 
   async saveSettings(refreshStore = false): Promise<void> {
-    await this.saveData(this.settings);
-    if (refreshStore) await this.store.updateSettings(this.settings);
-    this.app.workspace.getLeavesOfType(VIEW_TYPE_CALM_TASKS).forEach(leaf => {
-      if (leaf.view instanceof CalmTasksView) leaf.view.applyAppearanceSettings();
+    const operation = this.settingsSaveQueue.then(async () => {
+      await this.saveData(this.settings);
+      if (refreshStore) await this.store.updateSettings(this.settings);
+      this.app.workspace.getLeavesOfType(VIEW_TYPE_CALM_TASKS).forEach(leaf => {
+        if (leaf.view instanceof CalmTasksView) leaf.view.applyAppearanceSettings();
+      });
     });
+    this.settingsSaveQueue = operation.then(() => undefined, () => undefined);
+    await operation;
   }
 }
 
 class CalmTasksSettingTab extends PluginSettingTab {
   constructor(app: App, private plugin: CalmTasksPlugin) { super(app, plugin); }
 
-  override display(): void {
+  override display(): void { this.renderSettings(); }
+
+  private renderSettings(): void {
     this.containerEl.empty();
     this.containerEl.addClass("calm-settings");
     const createGroup = (title: string, description: string): HTMLElement => {
@@ -255,6 +282,154 @@ class CalmTasksSettingTab extends PluginSettingTab {
         src: "https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png",
         alt: "Buy Me a Coffee"
       }
+    });
+
+    const sync = createGroup("Microsoft To Do sync", "Optional two-way sync. It uses no timer, authentication, or network resources while disabled.");
+    new Setting(sync).setName("Enable Microsoft To Do sync").setDesc("Keep this off unless you want to connect Calm Tasks to Microsoft To Do.").addToggle(toggle => toggle
+      .setValue(this.plugin.settings.microsoftSync.enabled).onChange(async value => {
+        this.plugin.settings.microsoftSync.enabled = value;
+        await this.plugin.saveSettings();
+        await this.plugin.syncCoordinator.updateEnabled();
+        this.redisplayPreservingScroll();
+      }));
+    if (this.plugin.settings.microsoftSync.enabled) {
+
+    const syncSettings = this.plugin.settings.microsoftSync;
+    new Setting(sync).setClass("calm-setting-wide").setName("Managed Markdown file").setDesc("Vault-relative mirror file for Microsoft To Do lists. The .md extension is added automatically.").addText(text => text
+      .setPlaceholder("Tasks/MS-ToDo").setValue(syncSettings.markdownPath).onChange(async value => {
+        syncSettings.markdownPath = value.trim();
+        await this.plugin.saveSettings();
+      }));
+    new Setting(sync).setClass("calm-setting-wide").setName("Microsoft Entra client ID").setDesc("Application (client) ID for a public client app. Calm Tasks never uses a client secret.").addText(text => text
+      .setPlaceholder("00000000-0000-0000-0000-000000000000").setValue(syncSettings.clientId).onChange(async value => {
+        syncSettings.clientId = value.trim();
+        await this.plugin.saveSettings();
+      }));
+    new Setting(sync).setName("Tenant / authority").setDesc("Use common, consumers, organizations, or a tenant ID.").addText(text => text
+      .setValue(syncSettings.tenant).onChange(async value => {
+        syncSettings.tenant = value.trim() || "common";
+        await this.plugin.saveSettings();
+      }));
+
+    const status = sync.createDiv({ cls: "ms-todo-sync-status" });
+    status.createEl("strong", { text: syncSettings.token ? "Status: signed in" : "Status: sign-in required" });
+    if (syncSettings.lastSyncAt) status.createDiv({ text: `Last sync: ${new Date(syncSettings.lastSyncAt).toLocaleString()} · ${syncSettings.lastSyncMessage ?? ""}` });
+    const auth = new Setting(sync).setName("Microsoft account").setDesc("Uses Microsoft device login with Tasks.ReadWrite permission.");
+    if (syncSettings.token) {
+      auth.addButton(button => {
+        button.setButtonText("Sign out");
+        button.buttonEl.addClass("mod-warning");
+        button.onClick(async () => {
+          await this.plugin.syncCoordinator.logout();
+          this.renderSettings();
+        });
+      });
+    } else {
+      auth.addButton(button => button.setButtonText("Sign in").setCta().onClick(async () => {
+        button.setDisabled(true).setButtonText("Waiting for sign-in…");
+        try {
+          await this.plugin.syncCoordinator.login((code, uri) => this.showDeviceCode(sync, code, uri));
+          new Notice("Microsoft sign-in completed.");
+        } catch (error) {
+          new Notice(error instanceof Error ? error.message : String(error), 8000);
+        }
+        this.renderSettings();
+      }));
+    }
+
+    new Setting(sync).setName("Automatic sync").setDesc("Runs at most once every 15 minutes. File changes and focus changes never trigger immediate network sync.");
+    new Setting(sync).setName("Sync Calm Tasks items").setDesc("Treat Obsidian tasks as the source of truth, including completion, edits, grouping metadata, additions, and deletions.").addToggle(toggle => toggle
+      .setValue(syncSettings.calmImportEnabled).onChange(async value => {
+        syncSettings.calmImportEnabled = value;
+        await this.plugin.saveSettings();
+      }));
+    new Setting(sync).setName("Microsoft target list").setDesc("Microsoft To Do list used for Calm Tasks items.").addText(text => text
+      .setPlaceholder("Tasks").setValue(syncSettings.calmTargetListName).onChange(async value => {
+        syncSettings.calmTargetListName = value.trim() || "Tasks";
+        await this.plugin.saveSettings();
+      }));
+    new Setting(sync).setName("Nested content opacity").setDesc("Opacity of note and multiline content in the managed Markdown file.").addSlider(slider => slider
+      .setLimits(0.1, 1, 0.05).setValue(syncSettings.childOpacity).onChange(async value => {
+        syncSettings.childOpacity = value;
+        this.plugin.syncCoordinator.applyVisualSettings();
+        await this.plugin.saveSettings();
+      }));
+    new Setting(sync).setName("Nested content weight").setDesc("Font weight of note and multiline content in the managed Markdown file.").addSlider(slider => slider
+      .setLimits(100, 900, 100).setValue(syncSettings.childFontWeight).onChange(async value => {
+        syncSettings.childFontWeight = value;
+        this.plugin.syncCoordinator.applyVisualSettings();
+        await this.plugin.saveSettings();
+      }));
+    new Setting(sync).setName("Sync now").setDesc("Compare the committed Obsidian state with Microsoft To Do now.").addButton(button => button
+      .setButtonText("Sync now").setCta().onClick(async () => {
+        button.setDisabled(true);
+        await this.plugin.syncCoordinator.syncWithNotice();
+        button.setDisabled(false);
+        this.renderSettings();
+      }));
+    new Setting(sync).setName("Clear conflict records").setDesc(`Remove ${syncSettings.conflicts.length} retained conflict copies.`).addButton(button => {
+      button.setButtonText("Clear all").setDisabled(syncSettings.conflicts.length === 0);
+      button.buttonEl.addClass("mod-warning");
+      button.onClick(async () => {
+          await this.plugin.syncCoordinator.clearConflicts();
+          new Notice("Conflict records cleared. They will be removed from the mirror file on the next sync.");
+          this.renderSettings();
+        });
+    });
+    }
+
+    const dailyNotes = createGroup("Daily note task moves", "Optionally move tasks from Calm Tasks into today's daily note.");
+    new Setting(dailyNotes).setName("Move tasks to daily notes").setDesc("Add a context-menu action that moves tasks into today's daily note.").addToggle(toggle => toggle
+      .setValue(this.plugin.settings.moveTasksToDailyNoteEnabled).onChange(async value => {
+        this.plugin.settings.moveTasksToDailyNoteEnabled = value;
+        await this.plugin.saveSettings();
+        this.redisplayPreservingScroll();
+      }));
+    if (this.plugin.settings.moveTasksToDailyNoteEnabled) {
+      const folderSetting = new Setting(dailyNotes).setClass("calm-setting-wide").setName("Daily notes folder").setDesc("Base folder for daily notes. Calm Tasks automatically adds the current YYYY/MM folders and YYYY-MM-DD.md filename.");
+      folderSetting.addText(text => {
+        const listId = "calm-daily-note-folders";
+        text.inputEl.setAttr("list", listId);
+        text.setPlaceholder("10 🙂 Life/93 ✉️ Daily note").setValue(this.plugin.settings.dailyNotesFolder).onChange(async value => {
+          this.plugin.settings.dailyNotesFolder = normalizeDailyNotesBaseFolder(value);
+          await this.plugin.saveSettings();
+        });
+        const choices = folderSetting.controlEl.createEl("datalist", { attr: { id: listId } });
+        this.app.vault.getAllLoadedFiles()
+          .filter((file): file is TFolder => file instanceof TFolder && Boolean(file.path)
+            && !/\/(?:19|20)\d{2}(?:\/(?:0[1-9]|1[0-2]))?$/u.test(file.path))
+          .sort((left, right) => left.path.localeCompare(right.path))
+          .forEach(folder => choices.createEl("option", { value: folder.path }));
+      });
+      new Setting(dailyNotes).setClass("calm-setting-wide").setName("Daily note task heading").setDesc("Optional Markdown heading used as the destination section. If it is absent, tasks are appended to the end of the note.").addText(text => text
+        .setPlaceholder("# 오늘의 할 일").setValue(this.plugin.settings.dailyNoteTaskHeading).onChange(async value => {
+          this.plugin.settings.dailyNoteTaskHeading = value.trim();
+          await this.plugin.saveSettings();
+        }));
+    }
+  }
+
+  private redisplayPreservingScroll(): void {
+    const scrollContainer = this.containerEl.closest<HTMLElement>(".vertical-tab-content") ?? this.containerEl;
+    const scrollTop = scrollContainer.scrollTop;
+    this.renderSettings();
+    window.requestAnimationFrame(() => {
+      scrollContainer.scrollTop = scrollTop;
+      window.requestAnimationFrame(() => { scrollContainer.scrollTop = scrollTop; });
+    });
+  }
+
+  private showDeviceCode(container: HTMLElement, code: string, uri: string): void {
+    const box = container.createDiv({ cls: "ms-todo-sync-status" });
+    box.createDiv({ text: "Enter this code in the Microsoft sign-in page." });
+    box.createDiv({ cls: "ms-todo-sync-code", text: code });
+    const actions = box.createDiv({ cls: "ms-todo-sync-actions" });
+    const open = actions.createEl("button", { text: "Open Microsoft sign-in" });
+    open.addEventListener("click", () => window.open(uri));
+    const copy = actions.createEl("button", { text: "Copy code" });
+    copy.addEventListener("click", () => {
+      void navigator.clipboard.writeText(code);
+      new Notice("Sign-in code copied.");
     });
   }
 }

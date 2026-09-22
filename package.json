@@ -1,8 +1,8 @@
 {
   "name": "obsidian-calm-tasks",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "private": true,
-  "description": "A calm, native-feeling task workspace for Obsidian Markdown tasks.",
+  "description": "A calm Obsidian task workspace with optional Microsoft To Do sync.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.mjs",

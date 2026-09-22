@@ -2,8 +2,10 @@ import { App, ItemView, MarkdownRenderer, Menu, Modal, Notice, TFile, WorkspaceL
 import { flattenTasks, parseTasks, taskDate } from "./parser";
 import { TaskStore } from "./task-store";
 import { CalmTasksSettings, SmartFilter, TaskFilters, TaskGroup, TaskItem, WorkspaceMode } from "./types";
+import { normalizePath as normalizeSyncPath, syncMarker } from "./sync/markdown";
 
 export const VIEW_TYPE_CALM_TASKS = "calm-tasks-workspace";
+const OPTIONAL_TODO_FILENAME = "🔥 00_To-do.md";
 
 function localDate(date = new Date()): string {
   const year = date.getFullYear();
@@ -106,6 +108,22 @@ class ConfirmGroupDeleteModal extends Modal {
   }
 }
 
+class ConfirmTaskDeleteModal extends Modal {
+  constructor(app: App, private count: number, private onConfirm: () => void) { super(app); }
+
+  override onOpen(): void {
+    this.modalEl.addClass("calm-task-delete-modal");
+    this.contentEl.empty();
+    this.contentEl.createEl("h2", { text: `Delete ${this.count} tasks?` });
+    this.contentEl.createEl("p", { text: "The selected tasks will be removed from their source Markdown files. This cannot be undone." });
+    const actions = this.contentEl.createDiv({ cls: "calm-confirm-actions" });
+    const cancel = actions.createEl("button", { text: "Cancel" });
+    cancel.addEventListener("click", () => this.close());
+    const remove = actions.createEl("button", { cls: "mod-warning", text: `Delete ${this.count} tasks` });
+    remove.addEventListener("click", () => { this.close(); this.onConfirm(); });
+  }
+}
+
 function serializeInlineMarkdown(root: HTMLElement): string {
   const serialize = (node: Node): string => {
     if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
@@ -129,12 +147,43 @@ function serializeInlineMarkdown(root: HTMLElement): string {
   return Array.from(root.childNodes).map(serialize).join("").replace(/\s+/g, " ").trim();
 }
 
+function splitInlineMarkdownAtCaret(root: HTMLElement): { before: string; after: string } | undefined {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount || !selection.isCollapsed) return undefined;
+  const caret = selection.getRangeAt(0);
+  if (!root.contains(caret.startContainer)) return undefined;
+
+  const serializeRange = (range: Range): string => {
+    const holder = createDiv();
+    holder.append(range.cloneContents());
+    return logicalInlineTitle(serializeInlineMarkdown(holder));
+  };
+  const before = document.createRange();
+  before.selectNodeContents(root);
+  before.setEnd(caret.startContainer, caret.startOffset);
+  const after = document.createRange();
+  after.selectNodeContents(root);
+  after.setStart(caret.startContainer, caret.startOffset);
+  return { before: serializeRange(before), after: serializeRange(after) };
+}
+
+function pastedExternalUrl(event: ClipboardEvent): string | undefined {
+  const value = event.clipboardData?.getData("text/plain").trim();
+  if (!value || /\s/u.test(value)) return undefined;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export class CalmTasksView extends ItemView {
   private mode: WorkspaceMode = "agenda";
   private filters: TaskFilters = { status: "open", date: "any", tag: "", query: "" };
   private collapsed = new Set<string>();
   private unsubscribe?: () => void;
-  private selectedTask?: { path: string; line: number };
+  private selectedTask?: { path: string; line: number; key?: string };
   private collapsedGroups = new Set<string>();
   private completedRange: "all" | "3days" | "7days" | "30days" = "all";
   private sessionCompleted = new Set<string>();
@@ -174,6 +223,7 @@ export class CalmTasksView extends ItemView {
   private filterSearchTimer?: number;
   private completionArchiveTimer?: number;
   private completionArchiveBoundary?: number;
+  private uiRevision = 0;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -263,10 +313,26 @@ export class CalmTasksView extends ItemView {
       }
       this.moveSelectionFromViewShortcut(direction);
     }, { capture: true });
+    this.registerDomEvent(window, "keydown", event => {
+      if (event.key !== "Delete" && event.key !== "Backspace") return;
+      if (this.app.workspace.getActiveViewOfType(CalmTasksView) !== this || this.selectedKeys.size < 2) return;
+      if (!isHTMLElement(event.target) || !this.contentEl.contains(event.target)) return;
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed) return;
+      if (event.target.closest("input, textarea, select, .calm-detail")) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      this.requestDeleteTaskKeys(Array.from(this.selectedKeys));
+    }, { capture: true });
+    this.registerDomEvent(this.contentEl, "pointerdown", () => { this.uiRevision += 1; }, { capture: true });
+    this.registerDomEvent(this.contentEl, "keydown", () => { this.uiRevision += 1; }, { capture: true });
+    this.registerDomEvent(this.contentEl, "input", () => { this.uiRevision += 1; }, { capture: true });
     const dismissFromExternalTarget = (target: EventTarget | null): void => {
       if (!isHTMLElement(target)) return;
       if (target.closest(".calm-task, .calm-detail")) return;
       if (target.closest(".menu, .menu-item, .suggestion-container")) return;
+      if (target.closest(".calm-task-delete-modal")) return;
+      if (document.querySelector(".calm-task-delete-modal") && target.closest(".modal-bg")) return;
       this.dismissTaskFocus();
     };
     this.registerDomEvent(document, "pointerdown", event => dismissFromExternalTarget(event.target), { capture: true });
@@ -375,6 +441,7 @@ export class CalmTasksView extends ItemView {
   }
 
   private clearTaskSelection(): void {
+    this.uiRevision += 1;
     this.selectedTask = undefined;
     this.selectedKeys.clear();
     this.selectionAnchor = undefined;
@@ -415,6 +482,10 @@ export class CalmTasksView extends ItemView {
     await this.renderDetail(staging);
     if (version !== this.detailRenderVersion) return;
     target.replaceChildren(...Array.from(staging.childNodes));
+    this.alignTaskControlsToFirstLine(target);
+    window.requestAnimationFrame(() => {
+      if (version === this.detailRenderVersion && target.isConnected) this.alignTaskControlsToFirstLine(target);
+    });
   }
 
   private render(): Promise<void> {
@@ -439,12 +510,17 @@ export class CalmTasksView extends ItemView {
     const previousList = root.querySelector<HTMLElement>(".calm-list-pane");
     if (previousList) this.listScrollTop = previousList.scrollTop;
     const version = ++this.renderVersion;
+    const uiRevision = this.uiRevision;
     this.rebuildTaskKeyCache();
     this.draftRendered = false;
     const staging = createDiv();
     this.renderToolbar(staging);
     await this.renderListView(staging);
     if (version !== this.renderVersion) return;
+    if (uiRevision !== this.uiRevision) {
+      window.setTimeout(() => void this.render(), 0);
+      return;
+    }
     root.replaceChildren(...Array.from(staging.childNodes));
     root.addClass("calm-tasks");
     this.applyAppearanceSettings();
@@ -480,11 +556,16 @@ export class CalmTasksView extends ItemView {
     const previousList = currentWorkspace.querySelector<HTMLElement>(".calm-list-pane");
     if (previousList) this.listScrollTop = previousList.scrollTop;
     const version = ++this.renderVersion;
+    const uiRevision = this.uiRevision;
     this.rebuildTaskKeyCache();
     this.draftRendered = false;
     const staging = createDiv();
     await this.renderListView(staging);
     if (version !== this.renderVersion || !currentWorkspace.isConnected) return;
+    if (uiRevision !== this.uiRevision) {
+      window.setTimeout(() => void this.renderWorkspaceOnly(), 0);
+      return;
+    }
     const nextWorkspace = staging.querySelector<HTMLElement>(".calm-workspace");
     if (!nextWorkspace) return;
     currentWorkspace.replaceWith(nextWorkspace);
@@ -498,13 +579,18 @@ export class CalmTasksView extends ItemView {
   }
 
   private alignTaskControlsToFirstLine(scope: ParentNode = this.contentEl): void {
-    const rows = scope.instanceOf(HTMLElement) && scope.matches(".calm-task")
+    const taskRows = scope.instanceOf(HTMLElement) && scope.matches(".calm-task")
       ? [scope]
       : Array.from(scope.querySelectorAll<HTMLElement>(".calm-task"));
-    const entries = rows.map(row => {
+    const detailRows = scope.instanceOf(HTMLElement) && scope.matches(".calm-detail-headline")
+      ? [scope]
+      : Array.from(scope.querySelectorAll<HTMLElement>(".calm-detail-headline"));
+    const entries = [...taskRows, ...detailRows].map(row => {
       const checkbox = row.querySelector<HTMLElement>(":scope > .calm-checkbox");
       const circle = checkbox?.querySelector<SVGElement>("svg");
-      const title = row.querySelector<HTMLElement>(":scope > .calm-task-content > .calm-task-title");
+      const title = row.matches(".calm-task")
+        ? row.querySelector<HTMLElement>(":scope > .calm-task-content > .calm-task-title")
+        : row.querySelector<HTMLElement>(":scope > .calm-detail-title");
       return checkbox && circle && title ? { checkbox, circle, title } : undefined;
     }).filter((entry): entry is { checkbox: HTMLElement; circle: SVGElement; title: HTMLElement } => Boolean(entry));
 
@@ -588,12 +674,33 @@ export class CalmTasksView extends ItemView {
     this.renderFilters(toolbar);
     const refresh = toolbar.createEl("button", { cls: "clickable-icon calm-refresh", attr: { "aria-label": "Refresh tasks" } });
     setIcon(refresh, "refresh-cw");
-    refresh.addEventListener("click", () => void this.store.refresh());
+    refresh.addEventListener("click", () => {
+      // A manually requested refresh ends the temporary "just completed"
+      // visibility period. The refreshed task list should respect the active
+      // status filter again and hide completed tasks from open views.
+      this.sessionCompleted.clear();
+      void this.store.refresh();
+    });
   }
 
   private renderFilters(toolbar: HTMLElement): void {
     const bar = toolbar.createDiv({ cls: "calm-filterbar" });
     const locked = Boolean(this.activeSmartFilterId);
+    const showPxdTodoFile = this.getSettings().showPxdTodoFile;
+    const fileToggle = bar.createEl("button", {
+      cls: `calm-file-toggle ${showPxdTodoFile ? "is-active" : ""}`,
+      attr: {
+        "aria-label": showPxdTodoFile ? "Hide tasks from 🔥 00_To-do" : "Show tasks from 🔥 00_To-do",
+        "aria-pressed": String(showPxdTodoFile)
+      }
+    });
+    setIcon(fileToggle.createSpan({ cls: "calm-file-toggle-icon" }), showPxdTodoFile ? "eye" : "eye-off");
+    fileToggle.createSpan({ text: "00_To-do" });
+    fileToggle.addEventListener("click", () => {
+      this.getSettings().showPxdTodoFile = !this.getSettings().showPxdTodoFile;
+      void this.render();
+      void this.saveSettings().catch(error => new Notice(error instanceof Error ? error.message : "Could not save the file visibility setting."));
+    });
     const status = bar.createEl("select", { attr: { "aria-label": "Task status" } });
     [["open", "Open"], ["done", "Completed"], ["all", "All statuses"]].forEach(([value, text]) => status.createEl("option", { value, text }));
     status.value = this.filters.status;
@@ -759,7 +866,8 @@ export class CalmTasksView extends ItemView {
   }
 
   private viewRoots(): TaskItem[] {
-    const roots = [...this.store.roots, ...this.pendingCreatedTasks];
+    const roots = [...this.store.roots, ...this.pendingCreatedTasks]
+      .filter(task => this.getSettings().showPxdTodoFile || task.path.split("/").at(-1) !== OPTIONAL_TODO_FILENAME);
     if (this.optimisticallyDeletedTaskIds.size === 0) return roots;
     const prune = (task: TaskItem): TaskItem | null => {
       if (this.optimisticallyDeletedTaskIds.has(task.id)) return null;
@@ -857,6 +965,12 @@ export class CalmTasksView extends ItemView {
 
   private taskBaseKey(task: TaskItem): string { return `${task.path}::${task.title.trim().toLocaleLowerCase()}`; }
 
+  private taskSyncKey(task: TaskItem): string | undefined {
+    const markers = Array.from((task.rawLine || task.title).matchAll(/<!--\s*mst:([a-z0-9]+)\s*-->/giu));
+    const marker = markers[markers.length - 1]?.[1];
+    return marker ? `mst:${marker.toLocaleLowerCase()}` : undefined;
+  }
+
   private taskIdentityKey(task: TaskItem): string { return `${task.path}\u0000${task.line}\u0000${task.title}`; }
 
   private rebuildTaskKeyCache(): void {
@@ -873,9 +987,40 @@ export class CalmTasksView extends ItemView {
       matches.forEach((task, index) => cache.set(this.taskIdentityKey(task), matches.length < 2 ? base : `${base}::duplicate:${index + 1}`));
     });
     this.taskKeyCache = cache;
+
+    const settings = this.getSettings();
+    let migrated = false;
+    tasks.forEach(task => {
+      const stableKey = this.taskSyncKey(task);
+      if (!stableKey) return;
+      const marker = stableKey.slice(4);
+      const cachedKey = cache.get(this.taskIdentityKey(task));
+      const legacyKeys = Object.keys(settings.groupAssignments).filter(key =>
+        key === cachedKey || key === this.taskBaseKey(task) || key.toLocaleLowerCase().includes(`<!-- mst:${marker} -->`)
+      );
+      if (settings.groupAssignments[stableKey] === undefined) {
+        const legacyKey = legacyKeys.find(key => settings.groupAssignments[key] !== undefined);
+        if (legacyKey) {
+          settings.groupAssignments[stableKey] = settings.groupAssignments[legacyKey] as string;
+          migrated = true;
+        }
+      }
+      Object.values(settings.taskOrder).forEach(order => {
+        const legacyIndexes = order
+          .map((key, index) => legacyKeys.includes(key) ? index : -1)
+          .filter(index => index >= 0);
+        if (!legacyIndexes.length || order.includes(stableKey)) return;
+        order[legacyIndexes[0] as number] = stableKey;
+        migrated = true;
+      });
+    });
+    if (migrated) void this.saveSettings().catch(error =>
+      new Notice(error instanceof Error ? error.message : "Could not migrate Microsoft To Do task placement."));
   }
 
   private taskGroupKey(task: TaskItem): string {
+    const syncKey = this.taskSyncKey(task);
+    if (syncKey) return syncKey;
     const identity = this.taskIdentityKey(task);
     let key = this.taskKeyCache.get(identity);
     if (!key) {
@@ -1336,6 +1481,7 @@ export class CalmTasksView extends ItemView {
   }
 
   private applyTaskMoveToDom(keys: string[], scopeId: string, destinationOrder: string[]): boolean {
+    this.uiRevision += 1;
     const rows = Array.from(this.contentEl.querySelectorAll<HTMLElement>(".calm-task[data-task-key]"));
     const moved = rows.filter(row => Boolean(row.dataset.taskKey && keys.includes(row.dataset.taskKey)))
       .map(row => row.closest<HTMLElement>(".calm-task-wrap"))
@@ -1439,7 +1585,10 @@ export class CalmTasksView extends ItemView {
     const wrapper = container.createDiv({ cls: "calm-task-wrap" });
     const key = this.taskGroupKey(task);
     if (groupable && !targetedReplacement) this.visibleTaskOrder.push(key);
-    const selected = this.selectedKeys.has(key) || (this.selectedTask?.path === task.path && this.selectedTask.line === task.line);
+    const selectedByDetail = this.selectedTask?.key
+      ? this.selectedTask.key === key
+      : this.selectedTask?.path === task.path && this.selectedTask.line === task.line;
+    const selected = this.selectedKeys.has(key) || selectedByDetail;
     const row = wrapper.createDiv({ cls: `calm-task ${task.status === "done" ? "is-done" : ""} ${selected ? "is-selected" : ""} ${this.selectedKeys.has(key) ? "is-multi-selected" : ""}`, attr: { "data-depth": String(Math.min(depth, 6)), tabindex: "0" } });
     row.dataset.taskKey = key;
     row.dataset.taskPath = task.path;
@@ -1461,7 +1610,7 @@ export class CalmTasksView extends ItemView {
 
     const content = row.createDiv({ cls: "calm-task-content" });
     const displayTitle = visibleTaskTitle(task.title);
-    const title = content.createDiv({ cls: `calm-task-title markdown-rendered ${displayTitle ? "" : "is-empty-title"}`, attr: { contenteditable: "true", spellcheck: "true" } });
+    const title = content.createDiv({ cls: `calm-task-title markdown-rendered ${displayTitle ? "" : "is-empty-title"}`, attr: { contenteditable: "true", spellcheck: "false" } });
     if (/[*_~`=<>#\\]|https?:\/\//u.test(displayTitle) || displayTitle.includes("[") || displayTitle.includes("]")) {
       await MarkdownRenderer.render(this.app, displayTitle, title, task.path, this);
     } else {
@@ -1489,6 +1638,7 @@ export class CalmTasksView extends ItemView {
         title.createSpan({ cls: `calm-inline-priority is-${task.priorityLabel.toLowerCase()}`, text: task.priorityLabel });
       }
     });
+    this.enableMarkdownLinkPaste(title);
     this.enableInlineTitleEditing(task, title, groupable, orderScope);
     const fileName = task.path.split("/").pop() ?? task.path;
     const sourceName = row.createEl("button", { cls: "calm-task-source-name", text: fileName, attr: { "aria-label": `Open ${task.path}` } });
@@ -1595,7 +1745,7 @@ export class CalmTasksView extends ItemView {
   private selectTask(task: TaskItem, groupable: boolean, shiftKey: boolean, orderScope?: string): void {
     const key = this.taskGroupKey(task);
     this.draftDetailHidden = true;
-    this.selectedTask = { path: task.path, line: task.line };
+    this.selectedTask = { path: task.path, line: task.line, key };
     this.focusTaskKey = key;
     this.keyboardTargetKey = key;
     this.keyboardTargetScope = orderScope;
@@ -1703,14 +1853,17 @@ export class CalmTasksView extends ItemView {
     return true;
   }
 
-  private showSelectedTasksMenu(event: MouseEvent): void {
+  private showSelectedTasksMenu(event: MouseEvent, contextTask: TaskItem): void {
     const menu = new Menu();
-    const keys = Array.from(this.selectedKeys);
+    const contextKey = this.taskGroupKey(contextTask);
+    const keys = this.selectedKeys.has(contextKey) ? Array.from(this.selectedKeys) : [contextKey];
     if (this.mode === "priority") {
       (["A", "B", "C", "D"] as const).forEach(priority => {
         menu.addItem(item => item.setTitle(`Move to ${priority}`).setIcon("signal-high").onClick(() => void this.setSelectedTasksPriority(keys, priority)));
       });
       menu.addItem(item => item.setTitle("Move to none").setIcon("circle-minus").onClick(() => void this.setSelectedTasksPriority(keys, undefined)));
+      this.addMoveToDailyNoteMenuItem(menu, keys);
+      this.addDeleteTasksMenuItem(menu, keys);
       menu.showAtMouseEvent(event);
       return;
     }
@@ -1720,14 +1873,204 @@ export class CalmTasksView extends ItemView {
         menu.addItem(item => item.setTitle(`Move to ${readableDate(date)} · ${date}`).setIcon("calendar-days").onClick(() => void this.setSelectedTasksDue(keys, date)));
       });
       menu.addItem(item => item.setTitle("Remove due date").setIcon("calendar-x").onClick(() => void this.setSelectedTasksDue(keys, undefined)));
+      this.addMoveToDailyNoteMenuItem(menu, keys);
+      this.addDeleteTasksMenuItem(menu, keys);
       menu.showAtMouseEvent(event);
       return;
     }
-    menu.addItem(item => item.setTitle("Move to inbox").setIcon("inbox").onClick(() => void this.moveTaskKeys(keys, "__inbox__", undefined, false, true)));
+    menu.addItem(item => item.setTitle("Move to inbox").setIcon("inbox").onClick(() => void this.moveTasksFromMenu(keys, "__inbox__")));
     this.getSettings().groups.forEach(group => {
-      menu.addItem(item => item.setTitle(`Move to ${group.name}`).setIcon("folder-input").onClick(() => void this.moveTaskKeys(keys, group.id, undefined, false, true)));
+      menu.addItem(item => item.setTitle(`Move to ${group.name}`).setIcon("folder-input").onClick(() => void this.moveTasksFromMenu(keys, group.id)));
     });
+    this.addMoveToDailyNoteMenuItem(menu, keys);
+    this.addDeleteTasksMenuItem(menu, keys);
     menu.showAtMouseEvent(event);
+  }
+
+  private addMoveToDailyNoteMenuItem(menu: Menu, keys: string[]): void {
+    if (!this.getSettings().moveTasksToDailyNoteEnabled) return;
+    const count = new Set(keys).size;
+    const today = localDate();
+    menu.addSeparator();
+    menu.addItem(item => item
+      .setTitle(count > 1 ? `Move ${count} tasks to daily note (${today})` : `Move to daily note (${today})`)
+      .setIcon("calendar-arrow-down")
+      .onClick(() => void this.moveTaskKeysToDailyNote(keys)));
+  }
+
+  private addDeleteTasksMenuItem(menu: Menu, keys: string[]): void {
+    menu.addSeparator();
+    const count = new Set(keys).size;
+    menu.addItem(item => item
+      .setTitle(count > 1 ? `Delete ${count} tasks` : "Delete task")
+      .setIcon("trash-2")
+      .onClick(() => this.requestDeleteTaskKeys(keys)));
+  }
+
+  private requestDeleteTaskKeys(keys: string[]): void {
+    const uniqueKeys = Array.from(new Set(keys));
+    const count = this.selectedTasksForKeys(uniqueKeys).length;
+    if (!count) {
+      new Notice("Could not find the selected tasks. Refresh Calm Tasks and try again.");
+      return;
+    }
+    if (count > 1) {
+      new ConfirmTaskDeleteModal(this.app, count, () => void this.deleteTaskKeys(uniqueKeys)).open();
+      return;
+    }
+    void this.deleteTaskKeys(uniqueKeys);
+  }
+
+  private async deleteTaskKeys(keys: string[]): Promise<void> {
+    const tasks = this.selectedTasksForKeys(keys);
+    if (!tasks.length) {
+      new Notice("Could not find the selected tasks. Refresh Calm Tasks and try again.");
+      return;
+    }
+
+    const selected = new Set(keys);
+    const visibleRows = Array.from(this.contentEl.querySelectorAll<HTMLElement>(".calm-task[data-task-key]"));
+    const selectedIndexes = visibleRows
+      .map((row, index) => selected.has(row.dataset.taskKey ?? "") ? index : -1)
+      .filter(index => index >= 0);
+    const lastSelectedIndex = selectedIndexes.length ? Math.max(...selectedIndexes) : -1;
+    const firstSelectedIndex = selectedIndexes.length ? Math.min(...selectedIndexes) : -1;
+    const fallbackRow = visibleRows.slice(lastSelectedIndex + 1).find(row => !selected.has(row.dataset.taskKey ?? ""))
+      ?? (firstSelectedIndex > 0 ? [...visibleRows.slice(0, firstSelectedIndex)].reverse().find(row => !selected.has(row.dataset.taskKey ?? "")) : undefined);
+    const fallbackKey = fallbackRow?.dataset.taskKey;
+    const fallbackScope = fallbackRow?.dataset.orderScope;
+    const fallbackGroupable = fallbackRow?.dataset.groupable === "true";
+
+    tasks.forEach(task => this.optimisticallyDeletedTaskIds.add(task.id));
+    visibleRows
+      .filter(row => selected.has(row.dataset.taskKey ?? ""))
+      .forEach(row => row.closest<HTMLElement>(".calm-task-wrap")?.remove());
+    const fallbackTask = fallbackKey
+      ? flattenTasks(this.viewRoots()).find(task => this.taskGroupKey(task) === fallbackKey)
+      : undefined;
+    if (fallbackTask && fallbackKey) {
+      this.selectTask(fallbackTask, fallbackGroupable, false, fallbackScope);
+      this.focusTaskKey = fallbackKey;
+      this.restoreEditingCaret = { taskKey: fallbackKey, offset: Number.MAX_SAFE_INTEGER };
+      this.syncSelectionClasses();
+    } else {
+      this.clearTaskSelection();
+    }
+    this.refreshGroupSummaries();
+    void this.refreshDetailPanel();
+
+    await this.runTaskMutation(async () => {
+      try {
+        await this.activeTitleCommit?.(false);
+        await this.store.deleteTasks(tasks);
+        const persistedKeys = new Set([...keys, ...tasks.map(task => this.taskGroupKey(task))]);
+        const settings = this.getSettings();
+        persistedKeys.forEach(key => delete settings.groupAssignments[key]);
+        Object.values(settings.taskOrder).forEach(order => {
+          for (let index = order.length - 1; index >= 0; index--) {
+            if (persistedKeys.has(order[index] as string)) order.splice(index, 1);
+          }
+        });
+        await this.saveSettings();
+      } catch (error) {
+        tasks.forEach(task => this.optimisticallyDeletedTaskIds.delete(task.id));
+        await this.store.refreshFiles(new Set(tasks.map(task => task.path)));
+        this.pendingStoreRender = false;
+        await this.render();
+        throw error;
+      }
+      tasks.forEach(task => this.optimisticallyDeletedTaskIds.delete(task.id));
+      this.pendingStoreRender = false;
+    });
+  }
+
+  private async moveTasksFromMenu(keys: string[], groupId: string): Promise<void> {
+    const selected = new Set(keys);
+    const liveKeys = flattenTasks(this.viewRoots())
+      .filter(task => selected.has(this.taskGroupKey(task)))
+      .map(task => this.taskGroupKey(task));
+    if (!liveKeys.length) {
+      new Notice("Could not find the selected task. Refresh Calm Tasks and try again.");
+      return;
+    }
+    await this.moveTaskKeys(liveKeys, groupId, undefined, false, true);
+    // Rebuild the groups from persisted assignments instead of relying on the
+    // optimistic DOM move. This also confirms file-level fallback assignments
+    // are overridden correctly when moving through the context menu.
+    await this.render();
+  }
+
+  private async moveTaskKeysToDailyNote(keys: string[]): Promise<void> {
+    const requestedKeys = Array.from(new Set(keys));
+    const requestedSelection = requestedKeys.length === this.selectedKeys.size
+      && requestedKeys.every(key => this.selectedKeys.has(key));
+    await this.runTaskMutation(async () => {
+      await this.activeTitleCommit?.(false);
+      // Committing an inline edit can change the task key. Resolve fresh task
+      // objects only after that commit so a stale/empty editor snapshot can
+      // never be removed from its source file.
+      const liveKeys = requestedSelection ? Array.from(this.selectedKeys) : requestedKeys;
+      const tasks = this.selectedTasksForKeys(liveKeys);
+      if (!tasks.length) throw new Error("Could not find the selected tasks. Refresh Calm Tasks and try again.");
+      if (tasks.some(task => !task.title.trim())) {
+        throw new Error("Finish entering the task title before moving it to the daily note.");
+      }
+      const placements = new Map(tasks.map(task => [this.taskGroupKey(task), this.assignedGroupId(task)]));
+      const settings = this.getSettings();
+      const moved = await this.store.moveTasksToDailyNote(tasks, settings.dailyNotesFolder, settings.dailyNoteTaskHeading);
+
+      const keyChanges = new Map<string, string>();
+      moved.forEach(({ before, after }) => keyChanges.set(this.taskGroupKey(before), this.taskGroupKey(after)));
+      moved.forEach(({ before, after }) => {
+        const previousKey = this.taskGroupKey(before);
+        const nextKey = this.taskGroupKey(after);
+        const previousBase = this.taskBaseKey(before);
+        const groupId = placements.get(previousKey);
+        delete settings.groupAssignments[previousKey];
+        delete settings.groupAssignments[previousBase];
+        if (groupId) settings.groupAssignments[nextKey] = groupId;
+        else if (settings.fileGroupAssignments[after.path]) settings.groupAssignments[nextKey] = "__inbox__";
+      });
+      const syncSettings = settings.microsoftSync;
+      const managedPath = normalizeSyncPath(syncSettings.markdownPath);
+      const now = new Date().toISOString();
+      moved.forEach(({ before, after }) => {
+        if (normalizeSyncPath(before.path) !== managedPath || normalizeSyncPath(after.path) === managedPath || !before.syncKey) return;
+        const snapshot = Object.values(syncSettings.snapshots).find(candidate => syncMarker("t", candidate.taskId) === before.syncKey);
+        if (!snapshot) return;
+        syncSettings.calmImports[`mst:${before.syncKey}`] = {
+          taskId: snapshot.taskId,
+          listId: snapshot.listId,
+          sourcePath: after.path,
+          sourceLine: after.line,
+          sourceTitle: after.title,
+          createdAt: snapshot.createdAt ?? now,
+          lastSyncedAt: now,
+          remoteCreatedAt: snapshot.createdAt
+        };
+        delete syncSettings.deletions[snapshot.taskId];
+      });
+      Object.values(settings.taskOrder).forEach(order => {
+        for (let index = 0; index < order.length; index++) {
+          const replacement = keyChanges.get(order[index] as string);
+          if (replacement) order[index] = replacement;
+        }
+      });
+      this.selectedKeys = new Set(Array.from(this.selectedKeys, key => keyChanges.get(key) ?? key));
+      if (this.selectionAnchor) this.selectionAnchor = keyChanges.get(this.selectionAnchor) ?? this.selectionAnchor;
+      if (this.keyboardTargetKey) this.keyboardTargetKey = keyChanges.get(this.keyboardTargetKey) ?? this.keyboardTargetKey;
+      if (this.selectedTask?.key) this.selectedTask.key = keyChanges.get(this.selectedTask.key) ?? this.selectedTask.key;
+      const selectedMoved = moved.find(({ before }) => this.selectedTask?.path === before.path && this.selectedTask.line === before.line);
+      if (selectedMoved && this.selectedTask) {
+        this.selectedTask.path = selectedMoved.after.path;
+        this.selectedTask.line = selectedMoved.after.line;
+        this.selectedTask.key = this.taskGroupKey(selectedMoved.after);
+      }
+      await this.saveSettings();
+      this.pendingStoreRender = false;
+      await this.render();
+      new Notice(moved.length > 1 ? `${moved.length} tasks moved to today's daily note.` : "Task moved to today's daily note.");
+    });
   }
 
   private selectedTasksForKeys(keys: string[]): TaskItem[] {
@@ -1788,7 +2131,7 @@ export class CalmTasksView extends ItemView {
       this.draftDetailHidden = true;
       this.editingTaskKey = key;
       this.activeTitleCommit = save;
-      this.selectedTask = { path: task.path, line: task.line };
+      this.selectedTask = { path: task.path, line: task.line, key };
       if (groupable) {
         if (!this.selectedKeys.has(key)) {
           this.selectedKeys = new Set([key]);
@@ -1838,13 +2181,15 @@ export class CalmTasksView extends ItemView {
       if (event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
+        const split = splitInlineMarkdownAtCaret(title);
         void (async () => {
+          if (split?.before && split.after) title.setText(split.before);
           await save(false);
           const currentTask = flattenTasks(this.store.roots).find(item => item.path === task.path && item.line === task.line) ?? task;
-          await this.startTaskDraft(currentTask, orderScope);
+          await this.startTaskDraft(currentTask, orderScope, split?.before && split.after ? split.after : "");
         })();
       }
-      if (event.key === "Backspace" && task.path === this.store.newTaskFilePath() && !logicalInlineTitle(serializeInlineMarkdown(title))) {
+      if (event.key === "Backspace" && !logicalInlineTitle(serializeInlineMarkdown(title))) {
         event.preventDefault();
         event.stopPropagation();
         const rows = Array.from(this.contentEl.querySelectorAll<HTMLElement>(".calm-task[data-task-key]"));
@@ -1872,6 +2217,16 @@ export class CalmTasksView extends ItemView {
             await this.store.deleteTask(task);
             this.optimisticallyDeletedTaskIds.delete(task.id);
             this.pendingStoreRender = false;
+            const settings = this.getSettings();
+            delete settings.groupAssignments[key];
+            Object.values(settings.taskOrder).forEach(order => {
+              let index = order.indexOf(key);
+              while (index >= 0) {
+                order.splice(index, 1);
+                index = order.indexOf(key);
+              }
+            });
+            await this.saveSettings();
           } catch (error) {
             this.optimisticallyDeletedTaskIds.delete(task.id);
             this.pendingStoreRender = false;
@@ -1892,10 +2247,13 @@ export class CalmTasksView extends ItemView {
         void this.render();
       }
     });
-    title.addEventListener("click", event => event.stopPropagation());
+    title.addEventListener("click", event => {
+      if (isHTMLElement(event.target) && event.target.closest("a")) event.preventDefault();
+      event.stopPropagation();
+    });
   }
 
-  private async startTaskDraft(task: TaskItem, orderScope: string): Promise<void> {
+  private async startTaskDraft(task: TaskItem, orderScope: string, initialTitle = ""): Promise<void> {
     this.preserveCurrentEmptyDraft();
     const afterTaskKey = this.taskGroupKey(task);
     const groupId = this.mode === "all" ? this.groupIdForTaskKey(afterTaskKey) : undefined;
@@ -1907,7 +2265,7 @@ export class CalmTasksView extends ItemView {
       mode: this.mode,
       due: this.mode === "agenda" ? taskDate(task) : undefined,
       priority: this.mode === "priority" ? task.priorityLabel : undefined,
-      title: ""
+      title: initialTitle
     };
     this.editingTaskKey = this.taskDraft.id;
     this.activeTitleCommit = undefined;
@@ -1958,7 +2316,9 @@ export class CalmTasksView extends ItemView {
     setIcon(checkbox, "circle");
     checkbox.createSpan({ cls: "calm-sr-only", text: "New task" });
     const content = row.createDiv({ cls: "calm-task-content" });
-    const title = content.createDiv({ cls: "calm-task-title calm-task-draft-title", attr: { contenteditable: "true", spellcheck: "true", role: "textbox" } });
+    const title = content.createDiv({ cls: "calm-task-title calm-task-draft-title", attr: { contenteditable: "true", spellcheck: "false", role: "textbox" } });
+    if (draft.title) title.setText(draft.title);
+    this.enableMarkdownLinkPaste(title);
     if (draft.due) {
       title.createSpan({ cls: "calm-inline-meta-separator", text: "\u00a0|\u00a0" });
       title.createSpan({ cls: `calm-inline-date ${dateVisualState(draft.due)}`, text: draft.due });
@@ -2067,7 +2427,7 @@ export class CalmTasksView extends ItemView {
         title.removeClass("calm-task-draft-title");
         title.addClass("calm-task-pending-title", "markdown-rendered");
         if (completeAndFocus) {
-          this.selectedTask = { path: pending.path, line: pending.line };
+          this.selectedTask = { path: pending.path, line: pending.line, key: createdKey };
           this.selectedKeys = new Set([createdKey]);
           this.selectionAnchor = createdKey;
           this.selectionScope = draft.orderScope;
@@ -2216,9 +2576,29 @@ export class CalmTasksView extends ItemView {
     }
 
     const selectedPending = this.selectedTask?.path === pendingPath && this.selectedTask.line === pendingLine;
+    const createdKey = this.taskGroupKey(created);
     this.pendingCreatedTasks = this.pendingCreatedTasks.filter(task => task.id !== pendingId);
+    const settings = this.getSettings();
+    const pendingGroup = settings.groupAssignments[pendingKey];
+    if (createdKey !== pendingKey) {
+      if (pendingGroup !== undefined) settings.groupAssignments[createdKey] = pendingGroup;
+      delete settings.groupAssignments[pendingKey];
+      Object.values(settings.taskOrder).forEach(order => {
+        for (let index = 0; index < order.length; index++) {
+          if (order[index] === pendingKey) order[index] = createdKey;
+        }
+      });
+      if (this.selectedKeys.delete(pendingKey)) this.selectedKeys.add(createdKey);
+      if (this.selectionAnchor === pendingKey) this.selectionAnchor = createdKey;
+      if (this.keyboardTargetKey === pendingKey) this.keyboardTargetKey = createdKey;
+      if (this.taskDraft?.afterTaskKey === pendingKey) this.taskDraft.afterTaskKey = createdKey;
+    }
+    // File-level grouping can differ between the source task and the configured
+    // new-task file. Pin the newly persisted task to the group inherited by the
+    // draft so it cannot fall back to Inbox or another file's default group.
+    if (draft.mode === "all" && draft.groupId) settings.groupAssignments[createdKey] = draft.groupId;
     void this.saveSettings().catch(error => new Notice(error instanceof Error ? error.message : "Could not save task ordering."));
-    if (selectedPending) this.selectedTask = { path: created.path, line: created.line };
+    if (selectedPending) this.selectedTask = { path: created.path, line: created.line, key: createdKey };
     Object.assign(pending, created);
     this.contentEl.querySelectorAll<HTMLElement>(".calm-task[data-task-path][data-task-line]").forEach(row => {
       if (row.dataset.taskPath !== pendingPath || Number(row.dataset.taskLine) !== pendingLine) return;
@@ -2269,6 +2649,9 @@ export class CalmTasksView extends ItemView {
         return;
       }
       if (isControl(event.target)) return;
+      const selection = window.getSelection();
+      const hasTitleSelection = Boolean(selection && !selection.isCollapsed
+        && ((selection.anchorNode && title.contains(selection.anchorNode)) || (selection.focusNode && title.contains(selection.focusNode))));
       if (this.editingTaskKey === key && title.contains(event.target as Node)) return;
       if (event.shiftKey && groupable) {
         event.preventDefault();
@@ -2280,7 +2663,7 @@ export class CalmTasksView extends ItemView {
       this.selectTask(task, groupable, false, sourceScope);
       this.syncSelectionClasses();
       void this.refreshDetailPanel();
-      if (!title.contains(event.target as Node)) focusTitle();
+      if (!title.contains(event.target as Node) && !hasTitleSelection) focusTitle();
     }, { capture: true });
 
     row.addEventListener("contextmenu", event => {
@@ -2291,19 +2674,20 @@ export class CalmTasksView extends ItemView {
         this.syncSelectionClasses();
         void this.refreshDetailPanel();
       }
-      this.showSelectedTasksMenu(event);
+      this.showSelectedTasksMenu(event, task);
     });
 
     if (!groupable) return;
     row.addEventListener("dragstart", event => event.preventDefault());
     row.addEventListener("pointerdown", downEvent => {
       if (downEvent.button !== 0 || isControl(downEvent.target) || downEvent.shiftKey) return;
-      const startedInEditingTitle = this.editingTaskKey === key && title.contains(downEvent.target as Node);
-      if (!startedInEditingTitle) downEvent.preventDefault();
+      const startedInTitle = title.contains(downEvent.target as Node);
+      if (!startedInTitle) downEvent.preventDefault();
       const startX = downEvent.clientX;
       const startY = downEvent.clientY;
       const sourceLeft = row.getBoundingClientRect().left;
       let dragging = false;
+      let selectingText = false;
       let movedAfterHold = false;
       let dragOverlay: HTMLElement | null = null;
       let targetRow: HTMLElement | null = null;
@@ -2409,11 +2793,24 @@ export class CalmTasksView extends ItemView {
         document.body.appendChild(dragOverlay);
         positionOverlay(clientY);
       };
-      const holdTimer = window.setTimeout(() => activateDrag(startX, startY), 300);
+      const holdTimer = startedInTitle ? undefined : window.setTimeout(() => activateDrag(startX, startY), 300);
+      const clearHoldTimer = (): void => {
+        if (holdTimer !== undefined) window.clearTimeout(holdTimer);
+      };
       const move = (event: PointerEvent): void => {
         if (!dragging) {
-          if (Math.hypot(event.clientX - startX, event.clientY - startY) >= 5) {
-            window.clearTimeout(holdTimer);
+          const deltaX = event.clientX - startX;
+          const deltaY = event.clientY - startY;
+          const distanceX = Math.abs(deltaX);
+          const distanceY = Math.abs(deltaY);
+          if (startedInTitle) {
+            if (!selectingText && Math.max(distanceX, distanceY) >= 5) {
+              if (distanceX >= distanceY) selectingText = true;
+              else activateDrag(event.clientX, event.clientY);
+            }
+            if (selectingText || !dragging) return;
+          } else if (Math.hypot(deltaX, deltaY) >= 5) {
+            clearHoldTimer();
             activateDrag(event.clientX, event.clientY);
           } else {
             event.preventDefault();
@@ -2426,7 +2823,7 @@ export class CalmTasksView extends ItemView {
         updateTarget(event);
       };
       const finish = (event: PointerEvent): void => {
-        window.clearTimeout(holdTimer);
+        clearHoldTimer();
         window.removeEventListener("pointermove", move, true);
         window.removeEventListener("pointerup", finish, true);
         window.removeEventListener("pointercancel", cancel, true);
@@ -2434,7 +2831,11 @@ export class CalmTasksView extends ItemView {
           this.selectTask(task, true, false, sourceScope);
           this.syncSelectionClasses();
           void this.refreshDetailPanel();
-          focusTitle(startX, startY);
+          if (selectingText) {
+            suppressClick = true;
+            window.setTimeout(() => { suppressClick = false; }, 0);
+          }
+          if (!startedInTitle) focusTitle(startX, startY);
           return;
         }
         event.preventDefault();
@@ -2450,7 +2851,7 @@ export class CalmTasksView extends ItemView {
         }
       };
       const cancel = (): void => {
-        window.clearTimeout(holdTimer);
+        clearHoldTimer();
         window.removeEventListener("pointermove", move, true);
         window.removeEventListener("pointerup", finish, true);
         window.removeEventListener("pointercancel", cancel, true);
@@ -2559,11 +2960,12 @@ export class CalmTasksView extends ItemView {
     target.scrollIntoView({ block: "nearest" });
 
     const row = target.closest<HTMLElement>(".calm-task");
+    const targetKey = row?.dataset.taskKey;
     const path = row?.dataset.taskPath;
     const line = Number(row?.dataset.taskLine);
-    const targetTask = path && Number.isInteger(line)
-      ? flattenTasks(this.store.roots).find(item => item.path === path && item.line === line)
-      : undefined;
+    const liveTasks = flattenTasks(this.viewRoots());
+    const targetTask = (targetKey ? liveTasks.find(item => this.taskGroupKey(item) === targetKey) : undefined)
+      ?? (!targetKey && path && Number.isInteger(line) ? liveTasks.find(item => item.path === path && item.line === line) : undefined);
     if (targetTask && row) {
       this.selectTask(targetTask, row.dataset.groupable === "true", false, row.dataset.orderScope);
       this.syncSelectionClasses();
@@ -2573,6 +2975,7 @@ export class CalmTasksView extends ItemView {
   }
 
   private syncSelectionClasses(): void {
+    this.uiRevision += 1;
     this.contentEl.querySelectorAll<HTMLElement>(".calm-task").forEach(row => {
       const selected = Boolean(row.dataset.taskKey && this.selectedKeys.has(row.dataset.taskKey));
       row.toggleClass("is-selected", selected);
@@ -2617,6 +3020,98 @@ export class CalmTasksView extends ItemView {
         if (this.activeTitleCommit === save) this.activeTitleCommit = undefined;
         void this.render();
       }
+    });
+  }
+
+  private enableMarkdownLinkPaste(title: HTMLElement): void {
+    const revealLink = (link: HTMLAnchorElement, focusNode?: Node, focusOffset?: number): void => {
+      const href = link.getAttribute("data-href") ?? link.getAttribute("href") ?? "";
+      if (!/^https?:\/\//iu.test(href)) return;
+      let labelOffset = link.textContent?.length ?? 0;
+      if (focusNode && link.contains(focusNode) && focusOffset !== undefined) {
+        const prefix = document.createRange();
+        prefix.selectNodeContents(link);
+        try {
+          prefix.setEnd(focusNode, focusOffset);
+          labelOffset = prefix.toString().length;
+        } catch { /* Keep the end-of-label fallback for a stale DOM position. */ }
+      }
+      const holder = createDiv();
+      holder.appendChild(link.cloneNode(true));
+      const markdown = serializeInlineMarkdown(holder);
+      const raw = document.createTextNode(markdown);
+      link.replaceWith(raw);
+      title.focus({ preventScroll: true });
+      const caret = document.createRange();
+      // External Markdown links begin with `[`. Put the caret at the same
+      // character within the now-visible label.
+      caret.setStart(raw, Math.min(markdown.length, 1 + labelOffset));
+      caret.collapse(true);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(caret);
+    };
+
+    title.addEventListener("pointerdown", event => {
+      if (event.button !== 0 || !isHTMLElement(event.target)) return;
+      const link = event.target.closest<HTMLAnchorElement>("a[href]");
+      if (!link || !title.contains(link)) return;
+      const caretDocument = document as Document & { caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null };
+      const position = caretDocument.caretPositionFromPoint?.(event.clientX, event.clientY);
+      event.preventDefault();
+      event.stopPropagation();
+      revealLink(link, position?.offsetNode, position?.offset);
+    }, { capture: true });
+
+    title.addEventListener("keyup", event => {
+      if (!/^(?:ArrowLeft|ArrowRight|Home|End)$/u.test(event.key)) return;
+      const selection = window.getSelection();
+      if (!selection?.isCollapsed || !selection.focusNode) return;
+      const parent = selection.focusNode.instanceOf(HTMLElement) ? selection.focusNode : selection.focusNode.parentElement;
+      const link = parent?.closest<HTMLAnchorElement>("a[href]");
+      if (link && title.contains(link)) revealLink(link, selection.focusNode, selection.focusOffset);
+    });
+
+    title.addEventListener("paste", event => {
+      const url = pastedExternalUrl(event);
+      const selection = window.getSelection();
+      if (!url || !selection?.rangeCount || selection.isCollapsed) return;
+      const range = selection.getRangeAt(0);
+      if (!title.contains(range.startContainer) || !title.contains(range.endContainer)) return;
+      const label = selection.toString();
+      if (!label.trim()) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      const markdown = `[${label}](${url})`;
+      // Electron's editing command records this replacement in the native
+      // contenteditable undo stack, unlike direct Range DOM mutations.
+      // Keep the compatibility call isolated: no modern contenteditable API
+      // can add a programmatic replacement to the native undo stack.
+      const editingDocument = document as unknown as { execCommand: (command: string, showUi: boolean, value: string) => boolean };
+      if (!editingDocument.execCommand("insertText", false, markdown)) {
+        range.deleteContents();
+        const raw = document.createTextNode(markdown);
+        range.insertNode(raw);
+        range.setStartAfter(raw);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        title.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste", data: markdown }));
+      }
+    });
+  }
+
+  private enableDetailExternalLinks(title: HTMLElement): void {
+    title.querySelectorAll<HTMLAnchorElement>("a[href]").forEach(link => {
+      const href = link.getAttribute("href")?.trim();
+      if (!href || !/^https?:\/\//iu.test(href)) return;
+      link.setAttrs({ target: "_blank", rel: "noopener noreferrer" });
+      link.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        window.open(href, "_blank", "noopener,noreferrer");
+      });
     });
   }
 
@@ -2677,6 +3172,7 @@ export class CalmTasksView extends ItemView {
       if (index >= 0) order[index] = nextKey;
     });
     if (this.selectedKeys.delete(previousKey)) this.selectedKeys.add(nextKey);
+    if (this.selectedTask?.key === previousKey) this.selectedTask.key = nextKey;
     if (this.sessionCompleted.delete(previousKey)) this.sessionCompleted.add(nextKey);
     if (this.selectionAnchor === previousKey) this.selectionAnchor = nextKey;
     if (this.keyboardTargetKey === previousKey) this.keyboardTargetKey = nextKey;
@@ -2684,7 +3180,7 @@ export class CalmTasksView extends ItemView {
     if (this.selectionScope === previousChildScope) this.selectionScope = nextChildScope;
     if (this.keyboardTargetScope === previousChildScope) this.keyboardTargetScope = nextChildScope;
     await this.saveSettings();
-    await this.store.refresh(true);
+    await this.store.refreshFiles([task.path]);
   }
 
   private async toggleTask(task: TaskItem): Promise<void> {
@@ -2718,13 +3214,14 @@ export class CalmTasksView extends ItemView {
       throw error;
     } finally {
       this.taskMutationsInProgress = Math.max(0, this.taskMutationsInProgress - 1);
-      // The targeted row already represents the latest model state. A queued
-      // refresh would only replace the whole list and cause visible flicker.
+      // TaskStore has now confirmed the write by reading the source file back.
+      // The targeted row already shows that state, so avoid a full-list repaint.
       this.pendingStoreRender = false;
     }
   }
 
   private updateTaskStatusInDom(task: TaskItem): void {
+    this.uiRevision += 1;
     const done = task.status === "done";
     const updateCheckbox = (checkbox: HTMLButtonElement): void => {
       // Obsidian's setIcon appends an SVG; clear the previous icon and hidden
@@ -2741,7 +3238,9 @@ export class CalmTasksView extends ItemView {
       if (checkbox) updateCheckbox(checkbox);
     });
 
-    if (this.selectedTask?.path !== task.path || this.selectedTask.line !== task.line) return;
+    if (!this.selectedTask) return;
+    const selectedKey = this.selectedTask.key;
+    if (selectedKey ? selectedKey !== this.taskGroupKey(task) : this.selectedTask.path !== task.path || this.selectedTask.line !== task.line) return;
     const headline = this.contentEl.querySelector<HTMLElement>(".calm-detail-headline");
     if (!headline) return;
     headline.toggleClass("is-done", done);
@@ -2751,7 +3250,26 @@ export class CalmTasksView extends ItemView {
 
   private findSelectedTask(): TaskItem | undefined {
     if (!this.selectedTask) return undefined;
-    return flattenTasks(this.viewRoots()).find(task => task.path === this.selectedTask?.path && task.line === this.selectedTask.line);
+    const tasks = flattenTasks(this.viewRoots());
+    const selectedKey = this.selectedTask.key ?? Array.from(this.selectedKeys)[0];
+    // Once a stable key is known, never fall back to a Markdown line number.
+    // Deleting earlier rows changes line numbers and could otherwise make the
+    // caret and highlighted task resolve to two different items.
+    const selected = selectedKey
+      ? tasks.find(task => this.taskGroupKey(task) === selectedKey)
+      : tasks.find(task => task.path === this.selectedTask?.path && task.line === this.selectedTask.line);
+    if (selected) {
+      const nextKey = this.taskGroupKey(selected);
+      if (selectedKey && selectedKey !== nextKey) {
+        if (this.selectedKeys.delete(selectedKey)) this.selectedKeys.add(nextKey);
+        if (this.selectionAnchor === selectedKey) this.selectionAnchor = nextKey;
+        if (this.keyboardTargetKey === selectedKey) this.keyboardTargetKey = nextKey;
+      }
+      this.selectedTask.path = selected.path;
+      this.selectedTask.line = selected.line;
+      this.selectedTask.key = nextKey;
+    }
+    return selected;
   }
 
   private async renderDetail(container: HTMLElement): Promise<void> {
@@ -2781,6 +3299,7 @@ export class CalmTasksView extends ItemView {
     checkbox.addEventListener("click", () => void this.run(() => this.toggleTask(task)));
     const title = headline.createDiv({ cls: "calm-detail-title markdown-rendered", attr: { contenteditable: "true", spellcheck: "true", role: "textbox" } });
     await MarkdownRenderer.render(this.app, visibleTaskTitle(task.title), title, task.path, this);
+    this.enableDetailExternalLinks(title);
     this.enableDetailTitleEditing(task, title);
 
     if (this.getSettings().detailPanelPosition === "bottom") {
@@ -2848,11 +3367,38 @@ export class CalmTasksView extends ItemView {
       const start = match.index;
       const url = match[0];
       if (start > cursor) value.appendText(note.slice(cursor, start));
-      const link = value.createEl("a", { text: url, href: url, attr: { target: "_blank", rel: "noopener noreferrer" } });
+      const link = value.createEl("a", { text: url, href: url, attr: { target: "_blank", rel: "noopener noreferrer", draggable: "false" } });
       link.addEventListener("click", event => event.stopPropagation());
       cursor = start + url.length;
     }
     if (cursor < note.length) value.appendText(note.slice(cursor));
+    value.addEventListener("contextmenu", event => {
+      const link = isHTMLElement(event.target) ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
+      const selection = window.getSelection();
+      const selectedText = selection && !selection.isCollapsed
+        && ((selection.anchorNode && value.contains(selection.anchorNode)) || (selection.focusNode && value.contains(selection.focusNode)))
+        ? selection.toString()
+        : "";
+      if (!link && !selectedText) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const menu = new Menu();
+      if (link) {
+        const url = link.href;
+        menu.addItem(item => item.setTitle("Copy URL").setIcon("link").onClick(() => this.copyDetailText(url, "URL copied")));
+      }
+      if (selectedText) {
+        menu.addItem(item => item.setTitle("Copy selected text").setIcon("copy").onClick(() => this.copyDetailText(selectedText, "Text copied")));
+      }
+      menu.showAtMouseEvent(event);
+    });
+  }
+
+  private copyDetailText(text: string, successMessage: string): void {
+    void navigator.clipboard.writeText(text).then(
+      () => new Notice(successMessage),
+      () => new Notice("Could not copy to the clipboard.")
+    );
   }
 
   private renderDueEditor(fields: HTMLElement, task: TaskItem): void {

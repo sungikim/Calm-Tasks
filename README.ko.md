@@ -22,6 +22,7 @@ Calm Tasks는 Org mode의 평문 중심 철학을 Obsidian에 맞게 더 작고 
 - 일반 Markdown 노트에서도 Task의 날짜와 우선순위를 자동으로 컬러 표시
 - 설정한 일괄 보관 시간까지 완료 Task를 작업 화면에 유지
 - 행 간격, 줄 높이와 Task 메타데이터 색상 설정
+- 선택적으로 Calm Tasks의 확정된 변경을 15분마다 Microsoft To Do와 동기화
 
 사용자 그룹을 삭제해도 Task는 삭제되지 않고 Inbox로 이동합니다.
 
@@ -65,6 +66,12 @@ Obsidian에서 위/아래 이동 명령에 원하는 단축키를 지정할 수 
 
 Daily Note의 Task도 다른 Markdown 파일과 똑같이 수집합니다. 끝내지 못한 Task를 `YYYY-MM-DD.md` 형식의 날짜 노트 사이에서 옮긴다면, 선택 기능인 **Preserve Daily Note placement**로 All 보기의 그룹과 순서를 유지할 수 있습니다. 이 설정은 기본적으로 꺼져 있습니다.
 
+## 선택 기능: Microsoft To Do 동기화
+
+Microsoft To Do 동기화는 Calm Tasks에 포함되어 있지만 기본적으로 꺼져 있습니다. 꺼져 있을 때는 인증 객체, 네트워크 클라이언트와 동기화 타이머를 만들지 않습니다. **설정 → Calm Tasks** 맨 아래에서 기능을 켜면 Client ID, 로그인, 전용 Markdown 파일과 동기화 옵션이 표시됩니다.
+
+기능을 켜면 자동 동기화는 최대 15분에 한 번 실행됩니다. 연결된 동일 Task가 양쪽에서 변경된 경우 Obsidian의 확정된 내용을 우선합니다. 편집하거나 이동해도 동일 항목을 추적할 수 있도록 체크박스 줄에 화면에 표시되지 않는 짧은 식별자를 사용합니다. 동기화 기능은 Markdown 파일을 삭제·이동·이름 변경하지 않으며, Microsoft To Do에서 항목을 삭제해도 일반 Obsidian 노트의 연결된 Task를 삭제하지 않습니다.
+
 ## 설치
 
 ### BRAT
@@ -79,7 +86,7 @@ BRAT을 설치한 뒤 **BRAT: Add a beta plugin for testing**을 실행하고 �
 <vault>/.obsidian/plugins/calm-tasks/
 ```
 
-Obsidian을 다시 불러오고 **설정 → 커뮤니티 플러그인**에서 Calm Tasks를 활성화합니다. 작업 화면에서 만든 새 Task는 기본적으로 Vault 루트의 `Calm Tasks.md`에 저장됩니다.
+Obsidian을 다시 불러오고 **설정 → 커뮤니티 플러그인**에서 Calm Tasks를 활성화합니다. 작업 화면에서 만든 새 Task는 기본적으로 Vault 루트의 `Calm Tasks.md`에 저장됩니다. 통합 동기화 기능을 사용할 때는 기존의 독립형 Calm To Do Sync 플러그인을 비활성화해 두세요.
 
 ## 테마 호환성
 

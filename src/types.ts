@@ -19,6 +19,7 @@ export interface TaskItem {
   status: TaskStatus;
   title: string;
   rawLine: string;
+  syncKey?: string;
   dates: TaskDates;
   priority: TaskPriority;
   priorityLabel?: "A" | "B" | "C" | "D";
@@ -38,6 +39,7 @@ export interface TaskFilters {
 }
 
 export interface CalmTasksSettings {
+  showPxdTodoFile: boolean;
   upcomingDays: number;
   excludedFolders: string[];
   newTaskFile: string;
@@ -50,6 +52,9 @@ export interface CalmTasksSettings {
   dailyCompletionArchiveEnabled: boolean;
   dailyCompletionArchiveTime: string;
   preserveDailyNoteTaskPlacement: boolean;
+  moveTasksToDailyNoteEnabled: boolean;
+  dailyNotesFolder: string;
+  dailyNoteTaskHeading: string;
   showDetailPanel: boolean;
   detailPanelPosition: "right" | "bottom";
   groups: TaskGroup[];
@@ -57,6 +62,7 @@ export interface CalmTasksSettings {
   fileGroupAssignments: Record<string, string>;
   taskOrder: Record<string, string[]>;
   smartFilters: SmartFilter[];
+  microsoftSync: MicrosoftSyncSettings;
 }
 
 export interface TaskGroup {
@@ -71,3 +77,4 @@ export interface SmartFilter {
   completedRange: "all" | "3days" | "7days" | "30days";
   filters: TaskFilters;
 }
+import type { PluginSettings as MicrosoftSyncSettings } from "./sync/types";

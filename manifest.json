@@ -1,9 +1,9 @@
 {
   "id": "calm-tasks",
   "name": "Calm Tasks",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "minAppVersion": "1.5.0",
-  "description": "A clean Task Workspace with nested tasks, Agenda, groups, and saved filters.",
+  "description": "A calm task workspace with optional Microsoft To Do sync.",
   "author": "sungikim",
   "fundingUrl": "https://buymeacoffee.com/sungikimi",
   "isDesktopOnly": false

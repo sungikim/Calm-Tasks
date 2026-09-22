@@ -22,6 +22,7 @@ Calm Tasks borrows the plain-text spirit of Org mode, with a smaller syntax desi
 - Color dates and priorities automatically in ordinary Markdown notes as well as the workspace.
 - Keep completed tasks visible until the configurable daily archive time.
 - Adjust spacing, line height, and task metadata colors.
+- Optionally sync committed Calm Tasks changes with Microsoft To Do every 15 minutes.
 
 Deleting a custom group does not delete its tasks; they return to Inbox.
 
@@ -65,6 +66,12 @@ The move commands can be assigned to any hotkeys in Obsidian. On macOS, `Control
 
 Tasks in Daily Notes are collected like tasks in any other Markdown file. If you move unfinished tasks between notes named `YYYY-MM-DD.md`, the optional **Preserve Daily Note placement** setting can retain their All-view group and order. This setting is off by default.
 
+## Optional Microsoft To Do sync
+
+Microsoft To Do sync is built into Calm Tasks but disabled by default. While disabled, Calm Tasks creates no authentication client, network client, or sync timer. Enable it at the bottom of **Settings → Calm Tasks** to reveal the client ID, sign-in, mirror-file, and sync controls.
+
+When enabled, automatic sync runs at most once every 15 minutes. Obsidian is authoritative when both sides changed the same linked task. Calm Tasks uses a short hidden marker on synchronized checkbox lines to retain identity across edits and moves. Sync never deletes, moves, or renames a Markdown file, and a task deleted in Microsoft To Do does not remove its linked task from an ordinary Obsidian note.
+
 ## Installation
 
 ### BRAT
@@ -79,7 +86,7 @@ Download `main.js`, `manifest.json`, and `styles.css` from the release and copy 
 <vault>/.obsidian/plugins/calm-tasks/
 ```
 
-Reload Obsidian and enable Calm Tasks under **Settings → Community plugins**. New workspace tasks are written to `Calm Tasks.md` in the vault root by default.
+Reload Obsidian and enable Calm Tasks under **Settings → Community plugins**. New workspace tasks are written to `Calm Tasks.md` in the vault root by default. The former standalone Calm To Do Sync plugin should remain disabled when using the integrated sync feature.
 
 ## Theme compatibility
 
